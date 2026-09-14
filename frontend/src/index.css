@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@import './theme/tokens.css';
+
+@theme inline {
+  --color-fond: var(--fond);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-bordure: var(--bordure);
+  --color-texte: var(--texte);
+  --color-texte-doux: var(--texte-doux);
+  --color-action: var(--action);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-succes: var(--succes);
+  --color-alerte: var(--alerte);
+  --color-info: var(--info);
+  --font-ui: var(--police-ui);
+  --font-data: var(--police-data);
+}
+
+@layer base {
+  body {
+    background-color: var(--fond);
+    color: var(--texte);
+    font-family: var(--police-ui);
+  }
+}

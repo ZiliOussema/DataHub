@@ -14,3 +14,7 @@ coverage/
 # Environnement local. Les fichiers .env.dev, .env.preprod et .env.prod sont
 # versionnés : ils ne contiennent aucun secret.
 .env
+
+# Journaux et fichiers locaux
+*.local
+*.log
