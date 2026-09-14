@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Environnement local. Les fichiers .env.dev, .env.preprod et .env.prod sont
+# versionnés : ils ne contiennent aucun secret.
+.env
