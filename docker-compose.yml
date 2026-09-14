@@ -1,0 +1,51 @@
+name: datahub
+
+services:
+  mongo:
+    image: mongo:8.0
+    # Dans un conteneur, MongoDB dimensionne son cache sur la RAM de l'hôte : on le fixe.
+    command: ["--wiredTigerCacheSizeGB", "1"]
+    mem_limit: 2g
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    env_file: ${ENV_FILE:-.env.dev}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      target: ${FRONTEND_TARGET:-dev}
+    env_file: ${ENV_FILE:-.env.dev}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:${FRONTEND_CONTAINER_PORT:-5173}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:${FRONTEND_CONTAINER_PORT:-5173}/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mongo-data:
