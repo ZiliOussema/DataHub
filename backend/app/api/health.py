@@ -12,6 +12,7 @@ router = APIRouter(tags=["health"])
 async def health(
     response: Response, mongo_up: Annotated[bool, Depends(mongo_is_up)]
 ) -> HealthResponse:
+    """Indique si le backend et MongoDB répondent : 200 si oui, 503 si la base manque."""
     if not mongo_up:
         # 503 et non 500 : le backend tourne, c'est sa base qui manque.
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
