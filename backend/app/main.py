@@ -1,21 +1,37 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.api.health import router as health_router
+from app.api.imports import router as imports_router
 from app.core.config import settings
 from app.core.database import create_client
+from app.core.errors import ConflictError, InvalidError, NotFoundError
+from app.repositories.imports import ImportRepository
+
+ERROR_STATUS = {NotFoundError: 404, ConflictError: 409, InvalidError: 422}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Ouvre la connexion MongoDB et crée les index au démarrage, la ferme à l'arrêt."""
     # Un client unique pour toute l'application : il porte le pool de connexions.
     client = create_client(settings)
     app.state.db = client[settings.mongo_db]
+    await ImportRepository(app.state.db).ensure_indexes()
     yield
     await client.close()
 
 
+async def handle_domain_error(request: Request, exc: Exception) -> JSONResponse:
+    """Traduit une erreur métier en réponse HTTP avec son code et son message."""
+    return JSONResponse(status_code=ERROR_STATUS[type(exc)], content={"detail": str(exc)})
+
+
 app = FastAPI(title="Datahub", lifespan=lifespan)
+for error in ERROR_STATUS:
+    app.add_exception_handler(error, handle_domain_error)
 app.include_router(health_router, prefix="/api")
+app.include_router(imports_router, prefix="/api")
