@@ -9,11 +9,13 @@ from app.core.config import Settings
 
 
 def create_client(settings: Settings) -> AsyncMongoClient[dict[str, Any]]:
+    """Crée le client MongoDB. La connexion s'ouvre à la première requête."""
     # MongoDB poursuit une requête abandonnée par le navigateur : timeoutMS plafonne sa durée.
     return AsyncMongoClient(settings.mongo_uri, timeoutMS=settings.mongo_timeout_ms)
 
 
 async def ping(db: AsyncDatabase[dict[str, Any]]) -> bool:
+    """Renvoie True si MongoDB répond, False sinon."""
     try:
         await db.command("ping")
     except PyMongoError:
@@ -22,4 +24,5 @@ async def ping(db: AsyncDatabase[dict[str, Any]]) -> bool:
 
 
 async def mongo_is_up(request: Request) -> bool:
+    """Dépendance FastAPI : vérifie la base ouverte au démarrage de l'application."""
     return await ping(request.app.state.db)
