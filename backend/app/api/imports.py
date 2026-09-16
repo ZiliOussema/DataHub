@@ -1,10 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 
+from app.core.uploads import saved_upload
 from app.repositories.imports import ImportRepository
+from app.schemas.columns import ColumnOut
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
 from app.services.imports import ImportService
+from app.services.type_detection import detect_types
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -15,6 +19,12 @@ def get_service(request: Request) -> ImportService:
 
 
 Service = Annotated[ImportService, Depends(get_service)]
+
+
+def _detect(file: UploadFile) -> list[ColumnOut]:
+    """Copie le fichier reçu et détecte ses types. Lève InvalidError s'il est illisible."""
+    with saved_upload(file.file) as path:
+        return detect_types(path, file.filename or "")
 
 
 @router.get("")
@@ -45,3 +55,14 @@ async def rename_import(import_id: str, body: ImportName, service: Service) -> I
 async def delete_import(import_id: str, service: Service) -> None:
     """Supprime un import et ses données."""
     await service.delete(import_id)
+
+
+@router.post("/{import_id}/detect-types")
+async def detect_column_types(
+    import_id: str, file: UploadFile, service: Service
+) -> list[ColumnOut]:
+    """Aperçu avant import : colonnes et types détectés, sans rien enregistrer."""
+    await service.get(import_id)
+    # Lecture du fichier entier : hors de la boucle asynchrone, sinon le serveur ne répond
+    # plus à personne pendant la détection.
+    return await run_in_threadpool(_detect, file)

@@ -14,6 +14,13 @@ class ImportService:
         """Renvoie les imports dans l'ordre d'affichage."""
         return await self._repository.list_all()
 
+    async def get(self, import_id: str) -> Document:
+        """Renvoie un import. Lève NotFoundError s'il n'existe pas."""
+        doc = await self._repository.get(import_id)
+        if doc is None:
+            raise NotFoundError(NOT_FOUND)
+        return doc
+
     async def create(self, name: str) -> Document:
         """Crée un import vide, placé après le dernier."""
         return await self._repository.insert(name, await self._repository.last_order() + 1)

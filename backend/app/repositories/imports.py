@@ -42,6 +42,12 @@ class ImportRepository:
         cursor = self._imports.find().sort([("order", ASCENDING), ("_id", ASCENDING)])
         return [_to_domain(doc) async for doc in cursor]
 
+    async def get(self, import_id: str) -> Document | None:
+        """Renvoie un import, ou None s'il n'existe pas."""
+        oid = _object_id(import_id)
+        doc = None if oid is None else await self._imports.find_one({"_id": oid})
+        return None if doc is None else _to_domain(doc)
+
     async def last_order(self) -> int:
         """Renvoie la plus grande position, ou -1 s'il n'existe aucun import."""
         last = await self._imports.find_one(sort=[("order", DESCENDING)])

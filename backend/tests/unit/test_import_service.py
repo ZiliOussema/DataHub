@@ -27,6 +27,10 @@ class FakeRepository:
         self.docs[doc["id"]] = doc
         return doc
 
+    async def get(self, import_id: str) -> dict[str, Any] | None:
+        """Renvoie un import, ou None s'il n'existe pas."""
+        return self.docs.get(import_id)
+
     async def rename(self, import_id: str, name: str) -> dict[str, Any] | None:
         """Renomme un import, ou renvoie None s'il n'existe pas."""
         doc = self.docs.get(import_id)
@@ -60,6 +64,17 @@ def test_create_places_new_import_last(service: ImportService) -> None:
 def test_rename_unknown_import_raises_not_found(service: ImportService) -> None:
     with pytest.raises(NotFoundError):
         asyncio.run(service.rename("inconnu", "Clients"))
+
+
+def test_get_returns_an_existing_import(service: ImportService) -> None:
+    created = asyncio.run(service.create("Clients"))
+
+    assert asyncio.run(service.get(created["id"])) == created
+
+
+def test_get_unknown_import_raises_not_found(service: ImportService) -> None:
+    with pytest.raises(NotFoundError):
+        asyncio.run(service.get("inconnu"))
 
 
 def test_delete_unknown_import_raises_not_found(service: ImportService) -> None:
