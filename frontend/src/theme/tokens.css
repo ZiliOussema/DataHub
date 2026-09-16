@@ -1,53 +1,41 @@
-/* Tokens de la charte graphique Aplusa, relevés sur le logo. */
+/* Palette de la maquette validée : rouge Aplusa pour l'action, ardoise pour la console. */
 :root {
+  color-scheme: light;
+
   /* marque */
-  --rouge-aplusa: #EE0000;
-  --rouge-clair:  #FF5A52;
-  --anthracite:   #646263;
+  --rouge:       #E4002B;
+  --rouge-fonce: #C10024;
+  --bleu:        #1782B4;
 
-  /* échelle de gris */
-  --gris-50:  #F5F6F7;  --gris-100: #E8EAEC;  --gris-200: #D3D6D9;
-  --gris-400: #A8ABAF;  --gris-500: #7F7F7F;  --gris-600: #646263;
-  --gris-700: #4A4C50;  --gris-800: #2E3034;  --gris-900: #1A1C1F;
+  /* barre latérale */
+  --nuit:       #26333C;
+  --nuit-2:     #2F3E48;
+  --nuit-3:     #3B4C57;
+  --nuit-texte: #C3CED6;
+  --nuit-doux:  #8A9AA5;
 
-  /* rôles */
-  --fond:        var(--gris-50);
-  --surface:     #FFFFFF;
-  --surface-2:   var(--gris-100);
-  --bordure:     var(--gris-200);
-  --texte:       var(--gris-800);
-  --texte-doux:  var(--gris-600);
-  --action:      var(--gris-700);
-  --accent:      var(--rouge-aplusa);
-  --danger:      #C0201A;
-  --succes:      #1C7350;
-  --alerte:      #9A6205;
-  --info:        #2563A8;
+  /* surfaces */
+  --fond:      #F3F5F7;
+  --surface:   #FFFFFF;
+  --surface-2: #EDF1F3;
+  --survol:    #F7F9FA;
 
-  /* types de colonnes */
-  --type-boolean: #6B46C1;  --type-boolean-fond: #EFE9FB;
-  --type-integer: #1D6FA5;  --type-integer-fond: #E5F0F8;
-  --type-float:   #0F766E;  --type-float-fond:   #E2F2F0;
-  --type-string:  #8A5A12;  --type-string-fond:  #F7EEDE;
+  /* bordure : contour d'un bloc ; filet : séparation à l'intérieur d'un bloc */
+  --bordure: #D9E0E5;
+  --filet:   #EAEFF2;
+
+  /* texte */
+  --texte:      #303C45;
+  --texte-doux: #66757F;
+  --texte-pale: #95A2AB;
+
+  /* états */
+  --danger: #C0201A;
+  --succes: #2F8A63;
+  --info:   var(--bleu);
 
   /* typographie */
-  --police-ui:   Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-  --police-data: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --fond:       #0F1620;
-    --surface:    #17212D;
-    --surface-2:  #1D2937;
-    --bordure:    #2C3A4A;
-    --texte:      #E6ECF3;
-    --texte-doux: #A9B8C9;
-    --action:     #8A9AAC;
-    --accent:     var(--rouge-clair);
-    --danger:     #F08A83;
-    --succes:     #5CC79A;
-    --alerte:     #E0AA4F;
-    --info:       #6EA8E8;
-  }
+  --police-titre: Mulish, "IBM Plex Sans", system-ui, sans-serif;
+  --police-ui:    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --police-mono:  "IBM Plex Mono", ui-monospace, Consolas, monospace;
 }
