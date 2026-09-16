@@ -102,3 +102,54 @@ class ImportRepository:
         await self._imports.bulk_write(
             [UpdateOne({"_id": ObjectId(i)}, {"$set": {"order": pos}}) for pos, i in enumerate(ids)]
         )
+
+    async def start_import(self, import_id: str, job_id: str) -> Document | None:
+        """Passe un import en cours d'import et renvoie son état d'avant.
+
+        Renvoie None s'il n'existe pas ou si un import de fichier y est déjà en cours.
+        """
+        oid = _object_id(import_id)
+        if oid is None:
+            return None
+        # Condition et écriture en une seule opération : deux envois simultanés sur le même
+        # import ne peuvent pas démarrer tous les deux.
+        doc = await self._imports.find_one_and_update(
+            {"_id": oid, "status": {"$ne": "importing"}},
+            # Le job est rattaché à l'import : sa progression se retrouve après un rechargement.
+            {"$set": {"status": "importing", "job_id": job_id, "error": None}},
+        )
+        return None if doc is None else _to_domain(doc)
+
+    async def finish_import(
+        self, import_id: str, version: int, columns: list[Document], row_count: int
+    ) -> None:
+        """Bascule un import sur sa nouvelle version de données, en une seule écriture."""
+        await self._imports.update_one(
+            {"_id": ObjectId(import_id)},
+            {
+                "$set": {
+                    "status": "ready",
+                    "version": version,
+                    "columns": columns,
+                    "row_count": row_count,
+                    "error": None,
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+
+    async def fail_import(self, import_id: str, error: str) -> None:
+        """Sort un import de l'état en cours : prêt s'il a déjà des données, en échec sinon."""
+        # Pipeline : le nouvel état dépend de la version en place, lue dans la même écriture.
+        # $literal empêche MongoDB de lire un message commençant par « $ » comme un champ.
+        await self._imports.update_one(
+            {"_id": ObjectId(import_id)},
+            [
+                {
+                    "$set": {
+                        "status": {"$cond": [{"$gt": ["$version", 0]}, "ready", "failed"]},
+                        "error": {"$literal": error},
+                    }
+                }
+            ],
+        )

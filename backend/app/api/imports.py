@@ -1,14 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.uploads import saved_upload
+from app.core.uploads import save_upload, saved_upload
+from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import ImportRepository
+from app.repositories.jobs import JobRepository
 from app.schemas.columns import ColumnOut
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
+from app.schemas.jobs import JobOut
 from app.services.imports import ImportService
 from app.services.type_detection import detect_types
+from app.services.uploads import UploadService
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -21,10 +25,19 @@ def get_service(request: Request) -> ImportService:
 Service = Annotated[ImportService, Depends(get_service)]
 
 
+def get_uploads(request: Request) -> UploadService:
+    """Construit le service d'upload sur la base ouverte au démarrage."""
+    db = request.app.state.db
+    return UploadService(ImportRepository(db), ImportDataRepository(db), JobRepository(db))
+
+
+Uploads = Annotated[UploadService, Depends(get_uploads)]
+
+
 def _detect(file: UploadFile) -> list[ColumnOut]:
     """Copie le fichier reçu et détecte ses types. Lève InvalidError s'il est illisible."""
     with saved_upload(file.file) as path:
-        return detect_types(path, file.filename or "")
+        return detect_types(path, file.filename or "").columns
 
 
 @router.get("")
@@ -66,3 +79,19 @@ async def detect_column_types(
     # Lecture du fichier entier : hors de la boucle asynchrone, sinon le serveur ne répond
     # plus à personne pendant la détection.
     return await run_in_threadpool(_detect, file)
+
+
+@router.post("/{import_id}/upload", status_code=status.HTTP_202_ACCEPTED)
+async def upload_file(
+    import_id: str, file: UploadFile, background: BackgroundTasks, uploads: Uploads
+) -> JobOut:
+    """Lance l'import d'un fichier en arrière-plan et renvoie le job qui suit son avancement."""
+    # Copié avant de répondre : FastAPI ferme le fichier reçu dès que la réponse est partie.
+    path = await run_in_threadpool(save_upload, file.file)
+    try:
+        job = await uploads.start(import_id)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    background.add_task(uploads.run, job["id"], import_id, path, file.filename or "")
+    return JobOut.model_validate(job)

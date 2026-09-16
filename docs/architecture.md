@@ -10,6 +10,14 @@
 | `app/schemas/` | Contrats des données échangées avec le frontend. |
 | `app/core/` | Configuration et connexion MongoDB. |
 
+## Collections MongoDB
+
+| Collection | Contenu |
+|---|---|
+| `imports` | Un document par import : nom, position, état, version en place, colonnes typées, nombre de lignes, dernière erreur. |
+| `import_data_{id}_v{n}` | Les lignes d'une version des données d'un import, une par document, `_id` égal au numéro de ligne. |
+| `jobs` | Suivi des traitements en arrière-plan : état, lignes traitées sur le total, message d'erreur. |
+
 ## Frontend
 
 | Dossier | Rôle |
