@@ -21,3 +21,11 @@
 | `src/types/` | Contrats TypeScript alignés sur les schémas du backend. |
 | `src/theme/` | Tokens de la charte graphique et constantes d'affichage partagées. |
 | `tests/` | Tests des services, des composants et des écrans. |
+
+## Règles du CRUD des imports
+
+- **Noms uniques, insensibles à la casse et aux accents.** L'index unique sur `name` porte la collation `{locale: "fr", strength: 2}` : « Clients » et « clients » sont le même nom. C'est MongoDB qui refuse le doublon, pas une vérification préalable, donc deux créations simultanées ne peuvent pas passer toutes les deux.
+- **Aucune erreur MongoDB ne sort du repository.** `DuplicateKeyError` y devient `ConflictError`. `app/main.py` traduit ensuite chaque erreur métier en code HTTP : `NotFoundError` 404, `ConflictError` 409, `InvalidError` 422. Aucune route ne manipule d'exception PyMongo.
+- **Un identifiant mal formé n'est pas une erreur serveur.** S'il ne peut pas être un `ObjectId`, le repository répond « absent » : 404, et non 500.
+- **L'ordre est enregistré en un seul aller-retour.** `set_order` envoie toutes les positions dans un `bulk_write`, et la liste est relue triée sur `(order, _id)`.
+- **Supprimer un import supprime ses données.** Les collections `import_data_…`, `stats_…` et `stats_cache_…` du même identifiant sont retirées dans la foulée : aucune collection orpheline.
