@@ -11,7 +11,9 @@ from app.core.config import Settings
 def create_client(settings: Settings) -> AsyncMongoClient[dict[str, Any]]:
     """Crée le client MongoDB. La connexion s'ouvre à la première requête."""
     # MongoDB poursuit une requête abandonnée par le navigateur : timeoutMS plafonne sa durée.
-    return AsyncMongoClient(settings.mongo_uri, timeoutMS=settings.mongo_timeout_ms)
+    # tz_aware : les dates sont stockées en UTC sans fuseau. Sans ce drapeau PyMongo les relit
+    # naïves, et le navigateur les prend pour de l'heure locale.
+    return AsyncMongoClient(settings.mongo_uri, timeoutMS=settings.mongo_timeout_ms, tz_aware=True)
 
 
 async def ping(db: AsyncDatabase[dict[str, Any]]) -> bool:

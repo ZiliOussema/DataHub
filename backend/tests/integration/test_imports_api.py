@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -38,6 +40,16 @@ def test_create_rejects_a_name_taken_ignoring_case(client: TestClient) -> None:
 
     assert response.status_code == 409
     assert "déjà utilisé" in response.json()["detail"]
+
+
+def test_dates_carry_their_timezone(client: TestClient) -> None:
+    create(client, "Clients")
+
+    # La date relue dans MongoDB, pas celle gardée en mémoire à la création : c'est la relecture
+    # qui perd le fuseau, et c'est elle que le navigateur affiche.
+    created_at = client.get("/api/imports").json()[0]["created_at"]
+
+    assert datetime.fromisoformat(created_at).tzinfo is not None
 
 
 def test_rename_changes_the_name(client: TestClient) -> None:
