@@ -10,7 +10,7 @@ def detect(tmp_path: Path, content: str, chunk_rows: int = 50_000) -> list[Colum
     """Écrit un CSV de test et renvoie ses colonnes détectées."""
     path = tmp_path / "data.csv"
     path.write_text(content, encoding="utf-8")
-    return detect_types(path, "data.csv", chunk_rows)
+    return detect_types(path, "data.csv", chunk_rows).columns
 
 
 def types(tmp_path: Path, content: str, chunk_rows: int = 50_000) -> list[ColumnType]:
@@ -35,6 +35,9 @@ def one_column(values: list[str]) -> str:
         (["00123", "75001"], "string"),
         (["Paris", "12"], "string"),
         (["1.2.3"], "string"),
+        (["123456789012345678"], "integer"),
+        (["1234567890123456789"], "string"),
+        (["12345678901234567890.5"], "string"),
     ],
 )
 def test_a_column_takes_the_most_precise_type(
@@ -78,3 +81,10 @@ def test_columns_keep_their_label_and_their_key(tmp_path: Path) -> None:
     assert detect(tmp_path, "Code postal\n00123\n") == [
         ColumnOut(label="Code postal", key="code_postal", type="string")
     ]
+
+
+def test_row_count_ignores_the_header_and_blank_lines(tmp_path: Path) -> None:
+    path = tmp_path / "data.csv"
+    path.write_text("a,b\n1,2\n\n3,4\n5,6\n", encoding="utf-8")
+
+    assert detect_types(path, "data.csv", chunk_rows=2).row_count == 3
