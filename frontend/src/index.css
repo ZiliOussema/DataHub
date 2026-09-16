@@ -5,17 +5,26 @@
   --color-fond: var(--fond);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-survol: var(--survol);
   --color-bordure: var(--bordure);
+  --color-filet: var(--filet);
   --color-texte: var(--texte);
   --color-texte-doux: var(--texte-doux);
-  --color-action: var(--action);
-  --color-accent: var(--accent);
+  --color-texte-pale: var(--texte-pale);
+  --color-rouge: var(--rouge);
+  --color-rouge-fonce: var(--rouge-fonce);
+  --color-bleu: var(--bleu);
+  --color-nuit: var(--nuit);
+  --color-nuit-2: var(--nuit-2);
+  --color-nuit-3: var(--nuit-3);
+  --color-nuit-texte: var(--nuit-texte);
+  --color-nuit-doux: var(--nuit-doux);
   --color-danger: var(--danger);
   --color-succes: var(--succes);
-  --color-alerte: var(--alerte);
   --color-info: var(--info);
+  --font-titre: var(--police-titre);
   --font-ui: var(--police-ui);
-  --font-data: var(--police-data);
+  --font-mono: var(--police-mono);
 }
 
 @layer base {
@@ -23,5 +32,20 @@
     background-color: var(--fond);
     color: var(--texte);
     font-family: var(--police-ui);
+    /* Densité console : 13,5 px met une ligne de tableau de plus à l'écran sans nuire à la lecture. */
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--police-titre);
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--rouge);
+    outline-offset: 1px;
   }
 }
