@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createImport,
   deleteImport,
+  detectTypes,
   listImports,
   renameImport,
   saveOrder,
@@ -46,4 +47,9 @@ export function useMoveImport() {
     ids.splice(from + direction, 0, moved)
     reorder.mutate(ids)
   }
+}
+
+/** Aperçu des colonnes d'un fichier. Rien n'est enregistré, donc aucun cache à rafraîchir. */
+export function useDetectTypes(importId: string) {
+  return useMutation({ mutationFn: (file: File) => detectTypes(importId, file) })
 }
