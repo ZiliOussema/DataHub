@@ -36,6 +36,11 @@ services:
       context: ./frontend
       target: ${FRONTEND_TARGET:-dev}
     env_file: ${ENV_FILE:-.env.dev}
+    volumes:
+      # Cible dev : le code est monté, Vite recharge sans reconstruire l'image.
+      # Volume anonyme sur node_modules pour garder ceux installés dans l'image.
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       backend:
         condition: service_healthy
