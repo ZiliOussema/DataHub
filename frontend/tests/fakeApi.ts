@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Column, Import } from '../src/types/imports'
+import type { Column, Import, Job } from '../src/types/imports'
 import { jsonResponse } from './helpers'
 
 export interface Call {
@@ -42,6 +42,30 @@ export function fakeApi(initial: Import[], detection: Column[] | string = []) {
       return Promise.resolve(jsonResponse(imports))
     }
 
+    // Import en arrière-plan : l'envoi passe l'import en cours, la première relecture du job
+    // le termine avec les colonnes de la détection simulée.
+    const uploaded = /^\/api\/imports\/([^/]+)\/upload$/.exec(input)
+    if (uploaded && method === 'POST') {
+      const item = imports.find((candidate) => candidate.id === uploaded[1])
+      if (!item) return Promise.resolve(jsonResponse({ detail: 'Import introuvable' }, 404))
+      item.status = 'importing'
+      item.job_id = `job-${item.id}`
+      return Promise.resolve(jsonResponse(makeJob(item.id, 'running'), 202))
+    }
+
+    const job = /^\/api\/jobs\/job-(.+)$/.exec(input)
+    if (job) {
+      const item = imports.find((candidate) => candidate.id === job[1])
+      if (item) {
+        Object.assign(item, {
+          status: 'ready',
+          columns: typeof detection === 'string' ? [] : detection,
+          row_count: 2,
+        })
+      }
+      return Promise.resolve(jsonResponse(makeJob(job[1], 'done')))
+    }
+
     const detect = /^\/api\/imports\/([^/]+)\/detect-types$/.exec(input)
     if (detect && method === 'POST') {
       if (!imports.some((item) => item.id === detect[1])) {
@@ -73,14 +97,30 @@ export function fakeApi(initial: Import[], detection: Column[] | string = []) {
   return { calls, imports }
 }
 
-/** Import de test, avec des dates fixes. */
-export function makeImport(id: string, name: string, order: number): Import {
+/** Import de test, vide par défaut, avec des dates fixes. */
+export function makeImport(
+  id: string,
+  name: string,
+  order: number,
+  extra: Partial<Import> = {},
+): Import {
   return {
     id,
     name,
     order,
     status: 'empty',
+    columns: [],
+    row_count: 0,
+    error: null,
+    job_id: null,
     created_at: '2026-09-15T10:00:00Z',
     updated_at: '2026-09-15T10:00:00Z',
+    ...extra,
   }
+}
+
+/** Job de test d'un import : terminé, il a traité ses deux lignes. */
+function makeJob(importId: string, status: Job['status']): Job {
+  const done = status === 'done' ? 2 : 0
+  return { id: `job-${importId}`, import_id: importId, status, processed: done, total: done, error: null }
 }

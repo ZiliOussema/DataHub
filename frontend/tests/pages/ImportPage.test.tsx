@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Route, Routes } from 'react-router'
@@ -60,4 +60,76 @@ test('affiche la raison du refus du fichier', async () => {
   )
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Fichier refusé : La ligne 3')
+})
+
+const columns = [
+  { label: 'Nom', key: 'nom', type: 'string' as const },
+  { label: 'Montant', key: 'montant', type: 'float' as const },
+]
+
+test("importe le fichier analysé et affiche les colonnes de l'import", async () => {
+  const api = fakeApi([makeImport('1', 'Ventes', 0)], columns)
+  renderWithProviders(routes, '/imports/1')
+
+  await userEvent.upload(
+    await screen.findByLabelText('Choisir un fichier'),
+    new File(['Nom;Montant'], 'ventes.csv'),
+  )
+  await userEvent.click(await screen.findByRole('button', { name: 'Importer le fichier' }))
+
+  expect(await screen.findByRole('heading', { name: "Colonnes de l'import" })).toBeInTheDocument()
+  expect(screen.getByText('2 lignes, 2 colonnes.')).toBeInTheDocument()
+  expect(api.calls.some((call) => call.url === '/api/imports/1/upload')).toBe(true)
+})
+
+test('demande confirmation avant de remplacer des données, en listant les colonnes changées', async () => {
+  const ready = makeImport('1', 'Ventes', 0, {
+    status: 'ready',
+    row_count: 1500,
+    columns: [
+      { label: 'Nom', key: 'nom', type: 'string' },
+      { label: 'Ville', key: 'ville', type: 'string' },
+    ],
+  })
+  const api = fakeApi([ready], columns)
+  renderWithProviders(routes, '/imports/1')
+
+  await userEvent.upload(
+    await screen.findByLabelText('Remplacer les données'),
+    new File(['Nom;Montant'], 'ventes.csv'),
+  )
+  await userEvent.click(await screen.findByRole('button', { name: 'Importer le fichier' }))
+
+  const dialog = screen.getByRole('dialog')
+  expect(dialog).toHaveTextContent(/1\s500 lignes actuelles seront remplacées/)
+  expect(dialog).toHaveTextContent('Colonnes ajoutées : Montant. Colonnes disparues : Ville.')
+  expect(api.calls.some((call) => call.url === '/api/imports/1/upload')).toBe(false)
+
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Remplacer' }))
+
+  expect(api.calls.some((call) => call.url === '/api/imports/1/upload')).toBe(true)
+})
+
+test("rappelle la raison du dernier échec d'un import", async () => {
+  fakeApi([makeImport('1', 'Ventes', 0, { status: 'failed', error: 'La ligne 3 contient trop de valeurs' })])
+  renderWithProviders(routes, '/imports/1')
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Le dernier import a échoué : La ligne 3 contient trop de valeurs',
+  )
+})
+
+test('affiche une barre de progression pour un import en cours', async () => {
+  fakeApi([makeImport('1', 'Ventes', 0, { status: 'importing' })])
+  renderWithProviders(routes, '/imports/1')
+
+  expect(await screen.findByRole('progressbar')).toBeInTheDocument()
+  expect(screen.getByText('Import en cours.')).toBeInTheDocument()
+})
+
+test("suit jusqu'au bout le job d'un import déjà en cours à l'ouverture de la page", async () => {
+  fakeApi([makeImport('1', 'Ventes', 0, { status: 'importing', job_id: 'job-1' })], columns)
+  renderWithProviders(routes, '/imports/1')
+
+  expect(await screen.findByRole('heading', { name: "Colonnes de l'import" })).toBeInTheDocument()
 })
