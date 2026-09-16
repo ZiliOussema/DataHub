@@ -1,4 +1,4 @@
-import type { Column, Import } from '../types/imports'
+import type { Column, Import, Job } from '../types/imports'
 import { json, request } from './api'
 
 export const listImports = (): Promise<Import[]> => request<Import[]>('/api/imports')
@@ -22,3 +22,12 @@ export function detectTypes(id: string, file: File): Promise<Column[]> {
   body.append('file', file)
   return request<Column[]>(`/api/imports/${id}/detect-types`, { method: 'POST', body })
 }
+
+/** Lance l'import du fichier en arrière-plan et renvoie le job qui suit son avancement. */
+export function uploadFile(id: string, file: File): Promise<Job> {
+  const body = new FormData()
+  body.append('file', file)
+  return request<Job>(`/api/imports/${id}/upload`, { method: 'POST', body })
+}
+
+export const getJob = (id: string): Promise<Job> => request<Job>(`/api/jobs/${id}`)
