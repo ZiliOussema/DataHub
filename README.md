@@ -29,6 +29,8 @@ Les fichiers `.env.dev`, `.env.preprod` et `.env.prod` pilotent chaque environne
 
 `main` ne reçoit que des versions étiquetées. `dev` intègre le travail. Chaque lot part d'une branche `feat/…`, revient dans `dev` par pull request en rebase and merge, et ne fusionne qu'avec un pipeline vert. Les commits suivent Conventional Commits.
 
+Une étiquette `vX.Y.Z` poussée sur `main` relance tout le pipeline, puis publie les images `datahub-backend` et `datahub-frontend` dans le registre de paquets GitHub, étiquetées `X.Y.Z` et `X.Y`.
+
 ## Stratégie de tests
 
 Les tests sont écrits avec le code qu'ils vérifient, dans le même commit.
