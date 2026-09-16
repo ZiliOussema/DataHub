@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Import } from '../src/types/imports'
+import type { Column, Import } from '../src/types/imports'
 import { jsonResponse } from './helpers'
 
 export interface Call {
@@ -9,15 +9,19 @@ export interface Call {
   body: unknown
 }
 
-/** Backend simulé : garde les imports en mémoire et enregistre les appels reçus. */
-export function fakeApi(initial: Import[]) {
+/**
+ * Backend simulé : garde les imports en mémoire et enregistre les appels reçus.
+ * `detection` est la réponse de detect-types : les colonnes, ou un message qui donne une 422.
+ */
+export function fakeApi(initial: Import[], detection: Column[] | string = []) {
   const imports = [...initial]
   const calls: Call[] = []
   let nextId = initial.length + 1
 
   const fetchMock = vi.fn((input: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    const body: unknown = init?.body ? JSON.parse(String(init.body)) : undefined
+    // Un fichier arrive en FormData, qu'on garde tel quel pour pouvoir l'inspecter.
+    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body
     calls.push({ url: input, method, body })
 
     if (input === '/api/imports' && method === 'GET') return Promise.resolve(jsonResponse(imports))
@@ -36,6 +40,18 @@ export function fakeApi(initial: Import[]) {
       const { ids } = body as { ids: string[] }
       imports.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id))
       return Promise.resolve(jsonResponse(imports))
+    }
+
+    const detect = /^\/api\/imports\/([^/]+)\/detect-types$/.exec(input)
+    if (detect && method === 'POST') {
+      if (!imports.some((item) => item.id === detect[1])) {
+        return Promise.resolve(jsonResponse({ detail: 'Import introuvable' }, 404))
+      }
+      return Promise.resolve(
+        typeof detection === 'string'
+          ? jsonResponse({ detail: detection }, 422)
+          : jsonResponse(detection),
+      )
     }
 
     const id = input.replace('/api/imports/', '')
