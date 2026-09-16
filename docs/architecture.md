@@ -28,4 +28,5 @@
 - **Aucune erreur MongoDB ne sort du repository.** `DuplicateKeyError` y devient `ConflictError`. `app/main.py` traduit ensuite chaque erreur métier en code HTTP : `NotFoundError` 404, `ConflictError` 409, `InvalidError` 422. Aucune route ne manipule d'exception PyMongo.
 - **Un identifiant mal formé n'est pas une erreur serveur.** S'il ne peut pas être un `ObjectId`, le repository répond « absent » : 404, et non 500.
 - **L'ordre est enregistré en un seul aller-retour.** `set_order` envoie toutes les positions dans un `bulk_write`, et la liste est relue triée sur `(order, _id)`.
+- **Les dates sortent en UTC avec leur fuseau.** Elles sont écrites par `datetime.now(UTC)` et relues avec `tz_aware=True` : sans ce drapeau PyMongo les rend naïves, et le navigateur affiche l'heure UTC comme si elle était locale.
 - **Supprimer un import supprime ses données.** Les collections `import_data_…`, `stats_…` et `stats_cache_…` du même identifiant sont retirées dans la foulée : aucune collection orpheline.
