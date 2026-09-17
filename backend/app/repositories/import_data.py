@@ -1,13 +1,67 @@
 from typing import Any
 
+import pymongo
 from pymongo.asynchronous.database import AsyncDatabase
 
+from app.schemas.columns import ColumnType
+from app.services.conversion import TRUE_VALUES
+from app.services.type_detection import BOOLEANS, INTEGER_PATTERN, float_pattern
+
 Document = dict[str, Any]
+
+EXAMPLES = 3
+# Au-delà de 2⁵³, un entier converti en décimal perd ses derniers chiffres.
+EXACT_FLOAT = 2**53
+# Tâche de fond : la copie dépasse le plafond de 5 s prévu pour les requêtes du navigateur.
+CONVERSION_TIMEOUT_S = 600
 
 
 def collection_name(import_id: str, version: int) -> str:
     """Renvoie le nom de la collection qui porte une version des données d'un import."""
     return f"import_data_{import_id}_v{version}"
+
+
+def _valid(field: str, source: ColumnType, target: ColumnType) -> object:
+    """Expression vraie si la valeur non vide du champ peut prendre le type cible sans perte."""
+    value = f"${field}"
+    if target == "string" or source == "boolean":
+        return True
+    if source == "string" and target == "integer":
+        return {"$regexMatch": {"input": value, "regex": f"^(?:{INTEGER_PATTERN})$"}}
+    if source == "string" and target == "float":
+        return {"$regexMatch": {"input": _dotted(value), "regex": f"^(?:{float_pattern(False)})$"}}
+    if source == "string":
+        return {"$in": [{"$toLower": value}, sorted(BOOLEANS)]}
+    if target == "boolean":
+        return {"$in": [value, [0, 1]]}
+    if target == "integer":
+        return {"$and": [{"$eq": [value, {"$trunc": value}]}, {"$lt": [{"$abs": value}, 10**18]}]}
+    return {"$lte": [{"$abs": value}, EXACT_FLOAT]}
+
+
+def _converted(field: str, source: ColumnType, target: ColumnType) -> object:
+    """Expression qui donne la valeur non vide du champ dans le type cible, déjà vérifiée."""
+    value = f"${field}"
+    if target == "string":
+        return {"$toString": value}
+    if source == "boolean":
+        return {"$cond": [value, 1, 0]} if target == "integer" else {"$cond": [value, 1.0, 0.0]}
+    if source == "string" and target == "integer":
+        return {"$toLong": value}
+    if source == "string" and target == "float":
+        return {"$toDouble": _dotted(value)}
+    if source == "string":
+        return {"$in": [{"$toLower": value}, sorted(TRUE_VALUES)]}
+    if target == "integer":
+        return {"$toLong": value}
+    if target == "float":
+        return {"$toDouble": value}
+    return {"$eq": [value, 1]}
+
+
+def _dotted(value: str) -> object:
+    """Remplace la virgule décimale par un point, pour lire « 12,5 » comme « 12.5 »."""
+    return {"$replaceAll": {"input": value, "find": ",", "replacement": "."}}
 
 
 class ImportDataRepository:
@@ -29,3 +83,45 @@ class ImportDataRepository:
         for name in await self._db.list_collection_names(filter={"name": {"$regex": pattern}}):
             if name != kept:
                 await self._db.drop_collection(name)
+
+    async def check_type(
+        self, import_id: str, version: int, key: str, source: ColumnType, target: ColumnType
+    ) -> tuple[int, list[str]]:
+        """Compte les valeurs non vides impossibles à convertir, avec quelques exemples."""
+        invalid = {"$match": {key: {"$ne": None}, "$expr": {"$not": [_valid(key, source, target)]}}}
+        data = self._db[collection_name(import_id, version)]
+        counted = await (await data.aggregate([invalid, {"$count": "n"}])).to_list()
+        sample = await (
+            await data.aggregate(
+                [invalid, {"$limit": EXAMPLES}, {"$project": {"v": {"$toString": f"${key}"}}}]
+            )
+        ).to_list()
+        return (counted[0]["n"] if counted else 0, [doc["v"] for doc in sample])
+
+    async def convert_column(
+        self,
+        import_id: str,
+        version: int,
+        new_version: int,
+        key: str,
+        source: ColumnType,
+        target: ColumnType,
+    ) -> None:
+        """Écrit une nouvelle version où la colonne a le type cible, valeurs déjà vérifiées."""
+        value = f"${key}"
+        normalized = f"_n_{key}"
+        converted = {"$cond": [{"$eq": [value, None]}, None, _converted(key, source, target)]}
+        pipeline: list[Document] = [{"$set": {key: converted}}]
+        if target == "string":
+            # $toLower transforme une valeur vide en chaîne vide : la copie doit rester vide aussi.
+            lowered = {"$cond": [{"$eq": [value, None]}, None, {"$toLower": value}]}
+            pipeline.append({"$set": {normalized: lowered}})
+        if source == "string":
+            pipeline.append({"$unset": normalized})
+        # $out remplace d'un coup la collection cible : la version n'existe qu'une fois complète.
+        pipeline.append({"$out": collection_name(import_id, new_version)})
+        with pymongo.timeout(CONVERSION_TIMEOUT_S):
+            cursor = await self._db[collection_name(import_id, version)].aggregate(
+                pipeline, allowDiskUse=True
+            )
+            await cursor.to_list()

@@ -1,15 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.uploads import save_upload, saved_upload
 from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import ImportRepository
 from app.repositories.jobs import JobRepository
-from app.schemas.columns import ColumnOut
+from app.schemas.columns import ColumnOut, ColumnType, TypeChange, TypeCheck
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
 from app.schemas.jobs import JobOut
+from app.services.column_types import ColumnTypeService
 from app.services.imports import ImportService
 from app.services.type_detection import detect_types
 from app.services.uploads import UploadService
@@ -32,6 +33,15 @@ def get_uploads(request: Request) -> UploadService:
 
 
 Uploads = Annotated[UploadService, Depends(get_uploads)]
+
+
+def get_column_types(request: Request) -> ColumnTypeService:
+    """Construit le service de correction de type sur la base ouverte au démarrage."""
+    db = request.app.state.db
+    return ColumnTypeService(ImportRepository(db), ImportDataRepository(db), JobRepository(db))
+
+
+ColumnTypes = Annotated[ColumnTypeService, Depends(get_column_types)]
 
 
 def _detect(file: UploadFile) -> list[ColumnOut]:
@@ -94,4 +104,25 @@ async def upload_file(
         path.unlink(missing_ok=True)
         raise
     background.add_task(uploads.run, job["id"], import_id, path, file.filename or "")
+    return JobOut.model_validate(job)
+
+
+@router.get("/{import_id}/columns/{key}/type-check")
+async def check_column_type(
+    import_id: str,
+    key: str,
+    target: Annotated[ColumnType, Query(alias="type")],
+    types: ColumnTypes,
+) -> TypeCheck:
+    """Vérifie qu'une colonne peut prendre un autre type sans perdre aucune valeur."""
+    return await types.check(import_id, key, target)
+
+
+@router.patch("/{import_id}/columns/{key}/type", status_code=status.HTTP_202_ACCEPTED)
+async def change_column_type(
+    import_id: str, key: str, body: TypeChange, background: BackgroundTasks, types: ColumnTypes
+) -> JobOut:
+    """Lance la conversion d'une colonne en arrière-plan et renvoie le job qui la suit."""
+    job = await types.start(import_id, key, body.type)
+    background.add_task(types.run, job["id"], import_id, key, body.type)
     return JobOut.model_validate(job)
