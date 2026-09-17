@@ -29,3 +29,8 @@ export interface Job {
   total: number
   error: string | null
 }
+
+export interface TypeCheck {
+  invalid_count: number
+  examples: string[]
+}

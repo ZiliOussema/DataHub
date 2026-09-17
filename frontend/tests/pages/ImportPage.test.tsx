@@ -115,7 +115,7 @@ test("rappelle la raison du dernier échec d'un import", async () => {
   renderWithProviders(routes, '/imports/1')
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Le dernier import a échoué : La ligne 3 contient trop de valeurs',
+    'Le dernier traitement a échoué : La ligne 3 contient trop de valeurs',
   )
 })
 
@@ -132,4 +132,37 @@ test("suit jusqu'au bout le job d'un import déjà en cours à l'ouverture de la
   renderWithProviders(routes, '/imports/1')
 
   expect(await screen.findByRole('heading', { name: "Colonnes de l'import" })).toBeInTheDocument()
+})
+
+const ventesPretes = () =>
+  makeImport('1', 'Ventes', 0, {
+    status: 'ready',
+    row_count: 1500,
+    columns: [{ label: 'Montant', key: 'montant', type: 'float' }],
+  })
+
+test('refuse un changement de type qui perdrait des valeurs, en montrant lesquelles', async () => {
+  const api = fakeApi([ventesPretes()], [], { invalid_count: 3, examples: ['1,5', 'N/A', '12.7'] })
+  renderWithProviders(routes, '/imports/1')
+
+  await userEvent.selectOptions(await screen.findByLabelText('Type de Montant'), 'integer')
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '3 valeurs ne peuvent pas devenir des entiers, par exemple « 1,5 », « N/A », « 12.7 ».',
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(api.calls.some((call) => call.method === 'PATCH')).toBe(false)
+})
+
+test('convertit une colonne après confirmation', async () => {
+  const api = fakeApi([ventesPretes()])
+  renderWithProviders(routes, '/imports/1')
+
+  await userEvent.selectOptions(await screen.findByLabelText('Type de Montant'), 'integer')
+  const dialog = await screen.findByRole('dialog', { name: 'Convertir « Montant » en entier ?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Convertir' }))
+
+  const patch = api.calls.find((call) => call.method === 'PATCH')
+  expect(patch).toMatchObject({ url: '/api/imports/1/columns/montant/type', body: { type: 'integer' } })
+  expect(await screen.findByDisplayValue('Entier')).toBeInTheDocument()
 })

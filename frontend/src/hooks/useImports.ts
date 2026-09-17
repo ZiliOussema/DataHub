@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
 import {
+  changeColumnType,
+  checkColumnType,
   createImport,
   deleteImport,
   detectTypes,
@@ -11,6 +13,7 @@ import {
   saveOrder,
   uploadFile,
 } from '../services/imports'
+import type { ColumnType } from '../types/imports'
 
 const IMPORTS = ['imports']
 
@@ -89,4 +92,19 @@ export function useJob(jobId: string | null) {
     }
   }, [status, client])
   return query
+}
+
+/** Vérification puis conversion du type d'une colonne. La conversion rafraîchit la liste. */
+export function useColumnTypeChange(importId: string) {
+  const client = useQueryClient()
+  type Change = { key: string; type: ColumnType }
+  return {
+    check: useMutation({
+      mutationFn: ({ key, type }: Change) => checkColumnType(importId, key, type),
+    }),
+    change: useMutation({
+      mutationFn: ({ key, type }: Change) => changeColumnType(importId, key, type),
+      onSuccess: () => client.invalidateQueries({ queryKey: IMPORTS }),
+    }),
+  }
 }
