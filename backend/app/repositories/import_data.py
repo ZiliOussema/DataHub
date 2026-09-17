@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import pymongo
@@ -12,8 +13,10 @@ Document = dict[str, Any]
 EXAMPLES = 3
 # Au-delà de 2⁵³, un entier converti en décimal perd ses derniers chiffres.
 EXACT_FLOAT = 2**53
-# Tâche de fond : la copie dépasse le plafond de 5 s prévu pour les requêtes du navigateur.
-CONVERSION_TIMEOUT_S = 600
+# Tâches de fond : copie ou index d'un million de lignes dépassent le plafond de 5 s du navigateur.
+BACKGROUND_TIMEOUT_S = 600
+# MongoDB accepte 64 index par collection, _id compris : on garde une marge.
+MAX_INDEXES = 60
 
 
 def collection_name(import_id: str, version: int) -> str:
@@ -120,8 +123,35 @@ class ImportDataRepository:
             pipeline.append({"$unset": normalized})
         # $out remplace d'un coup la collection cible : la version n'existe qu'une fois complète.
         pipeline.append({"$out": collection_name(import_id, new_version)})
-        with pymongo.timeout(CONVERSION_TIMEOUT_S):
+        with pymongo.timeout(BACKGROUND_TIMEOUT_S):
             cursor = await self._db[collection_name(import_id, version)].aggregate(
                 pipeline, allowDiskUse=True
             )
             await cursor.to_list()
+
+    async def find_rows(
+        self,
+        import_id: str,
+        version: int,
+        query: Document,
+        sort: list[tuple[str, int]],
+        hidden: list[str],
+        offset: int,
+        limit: int,
+    ) -> tuple[list[Document], int]:
+        """Renvoie un paquet de lignes et le nombre total de lignes qui passent les filtres."""
+        data = self._db[collection_name(import_id, version)]
+        rows = data.find(query, {field: 0 for field in hidden} or None)
+        rows = rows.sort(sort).skip(offset).limit(limit)
+        # Sans filtre, le total vient d'un compteur tenu par MongoDB : 1 ms au lieu de 190 ms.
+        total = data.count_documents(query) if query else data.estimated_document_count()
+        return await asyncio.gather(rows.to_list(), total)
+
+    async def ensure_index(self, import_id: str, version: int, key: str) -> None:
+        """Crée l'index (clé, _id) d'une colonne s'il manque, dans la limite de MAX_INDEXES."""
+        data = self._db[collection_name(import_id, version)]
+        names = [index["name"] for index in await (await data.list_indexes()).to_list()]
+        if f"{key}_1__id_1" in names or len(names) > MAX_INDEXES:
+            return
+        with pymongo.timeout(BACKGROUND_TIMEOUT_S):
+            await data.create_index([(key, 1), ("_id", 1)])

@@ -8,9 +8,11 @@ from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import ImportRepository
 from app.repositories.jobs import JobRepository
 from app.schemas.columns import ColumnOut, ColumnType, TypeChange, TypeCheck
+from app.schemas.data import DataPage
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
 from app.schemas.jobs import JobOut
 from app.services.column_types import ColumnTypeService
+from app.services.data import DataService
 from app.services.imports import ImportService
 from app.services.type_detection import detect_types
 from app.services.uploads import UploadService
@@ -42,6 +44,15 @@ def get_column_types(request: Request) -> ColumnTypeService:
 
 
 ColumnTypes = Annotated[ColumnTypeService, Depends(get_column_types)]
+
+
+def get_data(request: Request) -> DataService:
+    """Construit le service de lecture des données sur la base ouverte au démarrage."""
+    db = request.app.state.db
+    return DataService(ImportRepository(db), ImportDataRepository(db))
+
+
+Data = Annotated[DataService, Depends(get_data)]
 
 
 def _detect(file: UploadFile) -> list[ColumnOut]:
@@ -126,3 +137,20 @@ async def change_column_type(
     job = await types.start(import_id, key, body.type)
     background.add_task(types.run, job["id"], import_id, key, body.type)
     return JobOut.model_validate(job)
+
+
+@router.get("/{import_id}/data")
+async def read_rows(
+    import_id: str,
+    request: Request,
+    background: BackgroundTasks,
+    data: Data,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    sort: str | None = None,
+) -> DataPage:
+    """Renvoie un paquet de lignes filtrées et triées, et leur total. Filtres : paramètres f.…"""
+    page, version, indexable = await data.read(import_id, offset, limit, sort, request.query_params)
+    if indexable:
+        background.add_task(data.ensure_indexes, import_id, version, indexable)
+    return page
