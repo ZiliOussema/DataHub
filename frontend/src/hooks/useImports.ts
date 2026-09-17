@@ -12,6 +12,7 @@ import {
   listImports,
   renameImport,
   saveOrder,
+  updateRow,
   uploadFile,
 } from '../services/imports'
 import type { ColumnType, Import, TableState } from '../types/imports'
@@ -125,5 +126,15 @@ export function useRowBlocks(item: Import, state: TableState, offsets: number[],
         gcTime: 30_000,
       }
     }),
+  })
+}
+
+/** Modification d'une ligne. Les paquets de lignes de l'import sont relus, page, tri et filtres gardés. */
+export function useRowUpdate(importId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ rowId, values }: { rowId: number; values: Record<string, string> }) =>
+      updateRow(importId, rowId, values),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['rows', importId] }),
   })
 }

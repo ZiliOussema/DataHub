@@ -6,6 +6,8 @@ import { ApiError } from '../services/api'
 import { TYPE_LABELS } from '../theme/types'
 import type { Column, Import, Row, TableState } from '../types/imports'
 import Pagination from './Pagination'
+import RowEditor from './RowEditor'
+import Icon from './icons'
 
 const ROW_HEIGHT = 34
 const VIEWPORT = 540
@@ -21,7 +23,7 @@ const champ =
   'h-7 w-full min-w-0 rounded-sm border border-filet bg-survol px-2 text-xs focus:border-bleu focus:bg-surface focus:outline-none'
 
 const grid = (columns: Column[]) => ({
-  gridTemplateColumns: `72px repeat(${columns.length}, minmax(150px, 1fr))`,
+  gridTemplateColumns: `72px repeat(${columns.length}, minmax(150px, 1fr)) 44px`,
 })
 const numeric = (column: Column) => column.type === 'integer' || column.type === 'float'
 
@@ -77,10 +79,11 @@ interface BodyProps {
   pageStart: number
   pageRows: number
   head: Row[] | undefined
+  onEdit: (row: Row) => void
 }
 
 /** Lignes visibles de la page, chargées par paquets de 100 au fil du défilement. */
-function Body({ item, state, pageStart, pageRows, head }: BodyProps) {
+function Body({ item, state, pageStart, pageRows, head, onEdit }: BodyProps) {
   const [scrollTop, setScrollTop] = useState(0)
   const fullHeight = pageRows * ROW_HEIGHT
   const height = Math.min(fullHeight, MAX_SCROLL)
@@ -134,6 +137,18 @@ function Body({ item, state, pageStart, pageRows, head }: BodyProps) {
                   )}
                 </div>
               ))}
+              <div role="cell" className="flex justify-center">
+                {row && (
+                  <button
+                    type="button"
+                    onClick={() => onEdit(row)}
+                    aria-label={`Modifier la ligne ${row._id + 1}`}
+                    className="grid h-7 w-7 place-items-center rounded-sm text-texte-pale hover:bg-surface-2 hover:text-texte"
+                  >
+                    <Icon nom="renommer" className="h-[15px] w-[15px]" />
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}
@@ -145,6 +160,7 @@ function Body({ item, state, pageStart, pageRows, head }: BodyProps) {
 /** Onglet Données : tableau paginé, trié et filtré par le serveur, virtualisé à l'écran. */
 export default function DataTable({ item }: { item: Import }) {
   const { state, update } = useTableState(item.id, item.columns)
+  const [editing, setEditing] = useState<Row | null>(null)
   const pageStart = (state.page - 1) * state.size
   // Le premier paquet de la page donne le total : il est toujours demandé.
   const [head] = useRowBlocks(item, state, [pageStart], pageStart + state.size)
@@ -224,6 +240,7 @@ export default function DataTable({ item }: { item: Import }) {
         pageStart={pageStart}
         pageRows={pageRows}
         head={head.data?.rows}
+        onEdit={setEditing}
       />
     )
   }
@@ -242,7 +259,7 @@ export default function DataTable({ item }: { item: Import }) {
         </div>
       )}
       <div role="table" aria-label="Données de l'import" className="overflow-x-auto">
-        <div style={{ minWidth: 72 + item.columns.length * 150 }}>
+        <div style={{ minWidth: 72 + item.columns.length * 150 + 44 }}>
           <div
             role="row"
             className="grid border-b border-bordure bg-survol"
@@ -285,6 +302,9 @@ export default function DataTable({ item }: { item: Import }) {
                 </div>
               )
             })}
+            <div role="columnheader" className="sr-only">
+              Actions
+            </div>
           </div>
           <div className="grid border-b border-bordure py-1.5" style={grid(item.columns)}>
             <div />
@@ -293,11 +313,13 @@ export default function DataTable({ item }: { item: Import }) {
                 {filter(column)}
               </div>
             ))}
+            <div />
           </div>
           {body}
         </div>
       </div>
       <Pagination state={state} total={total} onChange={update} />
+      {editing && <RowEditor item={item} row={editing} onClose={() => setEditing(null)} />}
     </section>
   )
 }

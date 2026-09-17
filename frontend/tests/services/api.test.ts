@@ -39,3 +39,13 @@ test('lève ApiError avec un message par défaut si le corps est vide', async ()
 
   await expect(request('/api/imports')).rejects.toThrow(new ApiError(500, 'Erreur 500').message)
 })
+
+test('lève ApiError avec un message par champ refusé', async () => {
+  const body = { detail: { age: 'Nombre entier attendu, par exemple 42' } }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(body, 422)))
+
+  await expect(request('/api/imports/1/data/0')).rejects.toMatchObject({
+    status: 422,
+    fields: { age: 'Nombre entier attendu, par exemple 42' },
+  })
+})
