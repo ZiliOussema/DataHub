@@ -1,4 +1,12 @@
-import type { Column, ColumnType, Import, Job, TypeCheck } from '../types/imports'
+import type {
+  Column,
+  ColumnType,
+  DataPage,
+  Import,
+  Job,
+  TableState,
+  TypeCheck,
+} from '../types/imports'
 import { json, request } from './api'
 
 export const listImports = (): Promise<Import[]> => request<Import[]>('/api/imports')
@@ -37,3 +45,18 @@ export const checkColumnType = (id: string, key: string, type: ColumnType): Prom
 
 export const changeColumnType = (id: string, key: string, type: ColumnType): Promise<Job> =>
   request<Job>(`/api/imports/${id}/columns/${key}/type`, json('PATCH', { type }))
+
+/** Paquet de lignes : tri et filtres de l'état du tableau, position exprimée en lignes. */
+export function getRows(
+  id: string,
+  state: TableState,
+  offset: number,
+  limit: number,
+): Promise<DataPage> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  if (state.sort) params.set('sort', state.sort)
+  for (const [name, value] of Object.entries(state.filters)) {
+    if (value !== '') params.set(`f.${name}`, value)
+  }
+  return request<DataPage>(`/api/imports/${id}/data?${params}`)
+}

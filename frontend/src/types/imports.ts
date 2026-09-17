@@ -34,3 +34,23 @@ export interface TypeCheck {
   invalid_count: number
   examples: string[]
 }
+
+/** Une ligne du tableau : son numéro dans le fichier, puis une valeur par clé de colonne. */
+export interface Row {
+  _id: number
+  [key: string]: string | number | boolean | null
+}
+
+export interface DataPage {
+  total: number
+  rows: Row[]
+}
+
+/** Ce que l'URL de la page mémorise : page, taille, tri et filtres. */
+export interface TableState {
+  page: number
+  size: number
+  sort: string | null
+  /** Clé du filtre sans le préfixe f. : « ville », « age.min », « actif ». */
+  filters: Record<string, string>
+}

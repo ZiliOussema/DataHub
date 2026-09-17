@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Column, Import, Job, TypeCheck } from '../src/types/imports'
+import type { Column, Import, Job, Row, TypeCheck } from '../src/types/imports'
 import { jsonResponse } from './helpers'
 
 export interface Call {
@@ -13,11 +13,13 @@ export interface Call {
  * Backend simulé : garde les imports en mémoire et enregistre les appels reçus.
  * `detection` est la réponse de detect-types : les colonnes, ou un message qui donne une 422.
  * `typeCheck` est la réponse de la vérification d'un changement de type.
+ * `rows` sont les lignes de données : la route les découpe par offset et limit, sans filtrer.
  */
 export function fakeApi(
   initial: Import[],
   detection: Column[] | string = [],
   typeCheck: TypeCheck = { invalid_count: 0, examples: [] },
+  rows: Row[] = [],
 ) {
   const imports = [...initial]
   const calls: Call[] = []
@@ -74,6 +76,14 @@ export function fakeApi(
       // Un import déjà en cours au départ du test se termine comme un upload.
       if (item) (finishers.get(item.id) ?? finishUpload)(item)
       return Promise.resolve(jsonResponse(makeJob(job[1], 'done')))
+    }
+
+    const data = /^\/api\/imports\/[^/]+\/data\?/.exec(input)
+    if (data) {
+      const params = new URL(input, 'http://test').searchParams
+      const offset = Number(params.get('offset'))
+      const slice = rows.slice(offset, offset + Number(params.get('limit')))
+      return Promise.resolve(jsonResponse({ total: rows.length, rows: slice }))
     }
 
     const checked = /^\/api\/imports\/([^/]+)\/columns\/[^/]+\/type-check\?type=/.exec(input)
