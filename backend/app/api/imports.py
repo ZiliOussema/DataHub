@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
@@ -8,7 +8,7 @@ from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import ImportRepository
 from app.repositories.jobs import JobRepository
 from app.schemas.columns import ColumnOut, ColumnType, TypeChange, TypeCheck
-from app.schemas.data import DataPage
+from app.schemas.data import DataPage, RowChange
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
 from app.schemas.jobs import JobOut
 from app.services.column_types import ColumnTypeService
@@ -154,3 +154,9 @@ async def read_rows(
     if indexable:
         background.add_task(data.ensure_indexes, import_id, version, indexable)
     return page
+
+
+@router.patch("/{import_id}/data/{row_id}")
+async def update_row(import_id: str, row_id: int, body: RowChange, data: Data) -> dict[str, Any]:
+    """Modifie une ligne et la renvoie à jour. Valeurs refusées : un message par champ."""
+    return await data.update_row(import_id, row_id, body.values)

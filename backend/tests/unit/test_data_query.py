@@ -3,7 +3,8 @@ import re
 import pytest
 
 from app.core.errors import InvalidError
-from app.services.data import build_query
+from app.schemas.columns import ColumnType
+from app.services.data import build_query, parse_cell
 
 COLUMNS = [
     {"key": "nom", "type": "string"},
@@ -65,3 +66,33 @@ def test_sort_breaks_ties_by_row_number_in_the_same_direction(sort: str, order: 
 def test_unknown_columns_and_values_are_rejected(sort: str | None, params: dict[str, str]) -> None:
     with pytest.raises(InvalidError):
         build_query(COLUMNS, sort, params)
+
+
+@pytest.mark.parametrize(
+    ("text", "column_type", "expected"),
+    [
+        (" 42 ", "integer", 42),
+        ("-3", "integer", -3),
+        ("12,5", "float", 12.5),
+        ("12.5", "float", 12.5),
+        ("OUI", "boolean", True),
+        ("0", "boolean", False),
+        ("  Zoé  ", "string", "Zoé"),
+        ("   ", "integer", None),
+    ],
+)
+def test_parse_cell_follows_the_import_rules(
+    text: str, column_type: ColumnType, expected: object
+) -> None:
+    assert parse_cell(text, column_type) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "column_type"),
+    [("00123", "integer"), ("12.5", "integer"), ("abc", "float"), ("peut-être", "boolean")],
+)
+def test_parse_cell_rejects_what_the_import_would_not_read(
+    text: str, column_type: ColumnType
+) -> None:
+    with pytest.raises(ValueError):
+        parse_cell(text, column_type)

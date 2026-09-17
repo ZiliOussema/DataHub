@@ -3,15 +3,20 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from app.core.errors import ConflictError, InvalidError, NotFoundError
+from app.core.errors import ConflictError, FieldErrors, InvalidError, NotFoundError
 from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import Document, ImportRepository
+from app.schemas.columns import ColumnType
 from app.schemas.data import DataPage
 from app.services.columns import normalize_text
+from app.services.conversion import TRUE_VALUES
 from app.services.imports import NOT_FOUND
+from app.services.type_detection import BOOLEANS, INTEGER_PATTERN, float_pattern
 
 FILTER_PREFIX = "f."
 BOOLEAN_FILTERS: dict[str, bool | None] = {"vrai": True, "faux": False, "vide": None}
+_INTEGER = re.compile(INTEGER_PATTERN)
+_FLOAT = re.compile(float_pattern(False))
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,32 @@ class DataQuery:
     sort: list[tuple[str, int]]
     indexable: set[str]
     hidden: list[str]
+
+
+def _hidden(types: Mapping[str, str]) -> list[str]:
+    """Copies du filtre « contient » : inutiles au tableau, elles ne sortent jamais de MongoDB."""
+    return [f"_n_{key}" for key, column_type in types.items() if column_type == "string"]
+
+
+def parse_cell(text: str, column_type: ColumnType) -> object:
+    """Lit une valeur saisie selon les règles de l'import. Lève ValueError avec le message."""
+    value = text.strip()
+    if value == "":
+        return None
+    if column_type == "integer":
+        if not _INTEGER.fullmatch(value):
+            raise ValueError("Nombre entier attendu, par exemple 42")
+        return int(value)
+    if column_type == "float":
+        dotted = value.replace(",", ".")
+        if not _FLOAT.fullmatch(dotted):
+            raise ValueError("Nombre attendu, par exemple 12,5")
+        return float(dotted)
+    if column_type == "boolean":
+        if value.lower() not in BOOLEANS:
+            raise ValueError("Valeur attendue : vrai, faux, oui, non, 1 ou 0")
+        return value.lower() in TRUE_VALUES
+    return value
 
 
 def _number(value: str, key: str) -> float:
@@ -67,9 +98,7 @@ def build_query(columns: list[Document], sort: str | None, params: Mapping[str, 
         direction = -1 if sort.startswith("-") else 1
         order = [(key, direction), ("_id", direction)]
         indexable.add(key)
-    # Copies du filtre « contient » : inutiles au tableau, elles ne sortent jamais de MongoDB.
-    hidden = [f"_n_{key}" for key, column_type in types.items() if column_type == "string"]
-    return DataQuery(conditions, order, indexable, hidden)
+    return DataQuery(conditions, order, indexable, _hidden(types))
 
 
 class DataService:
@@ -101,3 +130,43 @@ class DataService:
         """Crée les index des colonnes triées ou filtrées par plage, après la réponse."""
         for key in keys:
             await self._data.ensure_index(import_id, version, key)
+
+    async def update_row(self, import_id: str, row_id: int, values: Mapping[str, str]) -> Document:
+        """Modifie une ligne, chaque valeur lue selon le type de sa colonne.
+
+        Lève NotFoundError, ConflictError pendant un traitement, FieldErrors sur une valeur refusée.
+        """
+        item = await self._imports.get(import_id)
+        if item is None:
+            raise NotFoundError(NOT_FOUND)
+        # Écrite dans la version qu'un réimport va remplacer, la modification serait perdue.
+        if item["status"] == "importing":
+            raise ConflictError("Un traitement est en cours sur cet import")
+        if not item.get("version"):
+            raise ConflictError("Cet import n'a pas encore de données")
+        types = {column["key"]: column["type"] for column in item["columns"]}
+        changes: Document = {}
+        errors: dict[str, str] = {}
+        for key, text in values.items():
+            if key not in types:
+                errors[key] = "Colonne inconnue"
+                continue
+            try:
+                value = parse_cell(text, types[key])
+            except ValueError as exc:
+                errors[key] = str(exc)
+                continue
+            changes[key] = value
+            if types[key] == "string":
+                # La copie suit la valeur, sinon « contient » ne retrouverait plus la ligne.
+                changes[f"_n_{key}"] = normalize_text(value) if isinstance(value, str) else None
+        if errors:
+            raise FieldErrors(errors)
+        if not changes:
+            raise InvalidError("Aucune valeur à modifier")
+        row = await self._data.update_row(
+            import_id, item["version"], row_id, changes, _hidden(types)
+        )
+        if row is None:
+            raise NotFoundError("Ligne introuvable")
+        return row

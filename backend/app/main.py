@@ -9,7 +9,7 @@ from app.api.imports import router as imports_router
 from app.api.jobs import router as jobs_router
 from app.core.config import settings
 from app.core.database import create_client
-from app.core.errors import ConflictError, InvalidError, NotFoundError
+from app.core.errors import ConflictError, FieldErrors, InvalidError, NotFoundError
 from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import ImportRepository
 from app.repositories.jobs import JobRepository
@@ -35,7 +35,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 async def handle_domain_error(request: Request, exc: Exception) -> JSONResponse:
     """Traduit une erreur métier en réponse HTTP avec son code et son message."""
-    return JSONResponse(status_code=ERROR_STATUS[type(exc)], content={"detail": str(exc)})
+    status = next(code for error, code in ERROR_STATUS.items() if isinstance(exc, error))
+    detail = exc.errors if isinstance(exc, FieldErrors) else str(exc)
+    return JSONResponse(status_code=status, content={"detail": detail})
 
 
 app = FastAPI(title="Datahub", lifespan=lifespan)

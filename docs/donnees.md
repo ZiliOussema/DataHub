@@ -34,6 +34,15 @@ Le tri, le total et la politique d'index suivent les mesures de `docs/mongodb-in
 - **60 index au plus** par collection, sous la limite de 64 de MongoDB ;
 - un réimport ou une conversion de type crée une collection sans ces index : ils se recréent au prochain tri.
 
+## Modification d'une ligne
+
+`PATCH /api/imports/{id}/data/{row_id}` avec `{"values": {"age": "35", "ville": ""}}` modifie les seuls champs envoyés et renvoie la ligne à jour.
+
+- Les valeurs arrivent en texte et sont lues avec **les règles de l'import** (`docs/import.md`) : `12,5` est un décimal, `00123` n'est pas un entier. Une chaîne vide efface la valeur.
+- Les refus arrivent **tous ensemble**, un message par champ : `{"detail": {"age": "Nombre entier attendu, par exemple 42"}}`. Rien n'est écrit tant qu'un champ est refusé.
+- La copie `_n_…` d'une colonne de texte est mise à jour avec la valeur, pour que le filtre « contient » retrouve la ligne.
+- Refusée en 409 pendant un réimport ou une conversion : écrite dans la version remplacée, elle serait perdue à la bascule.
+
 ## Limites connues
 
 Un tri sur une colonne combiné à un filtre sur une autre n'utilise qu'un des deux index. Les autres limites de lecture sont listées dans `docs/mongodb-index.md`.
