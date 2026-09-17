@@ -65,11 +65,11 @@ class UploadService:
             await self._data.drop_other_versions(import_id, keep=version)
             await self._jobs.finish(job_id)
         except InvalidError as exc:
-            await self._restore(import_id, str(exc))
+            await restore(self._imports, self._data, import_id, str(exc))
             await self._jobs.fail(job_id, str(exc))
         except Exception:
             logger.exception("Import %s en échec", import_id)
-            await self._restore(import_id, UNEXPECTED)
+            await restore(self._imports, self._data, import_id, UNEXPECTED)
             await self._jobs.fail(job_id, UNEXPECTED)
         finally:
             path.unlink(missing_ok=True)
@@ -77,10 +77,13 @@ class UploadService:
     async def recover(self) -> None:
         """Au démarrage, sort de l'état en cours les imports interrompus par un arrêt du serveur."""
         for import_id in await self._jobs.fail_running(INTERRUPTED):
-            await self._restore(import_id, INTERRUPTED)
+            await restore(self._imports, self._data, import_id, INTERRUPTED)
 
-    async def _restore(self, import_id: str, error: str) -> None:
-        """Remet un import dans un état stable après un échec, et supprime sa version partielle."""
-        await self._imports.fail_import(import_id, error)
-        current = await self._imports.get(import_id)
-        await self._data.drop_other_versions(import_id, keep=(current or {}).get("version", 0))
+
+async def restore(
+    imports: ImportRepository, data: ImportDataRepository, import_id: str, error: str
+) -> None:
+    """Remet un import dans un état stable après un échec, et supprime sa version partielle."""
+    await imports.fail_import(import_id, error)
+    current = await imports.get(import_id)
+    await data.drop_other_versions(import_id, keep=(current or {}).get("version", 0))

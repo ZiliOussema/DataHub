@@ -11,3 +11,13 @@ class ColumnOut(BaseModel):
     label: str
     key: str
     type: ColumnType
+
+
+class TypeChange(BaseModel):
+    type: ColumnType
+
+
+class TypeCheck(BaseModel):
+    invalid_count: int
+    # Trois valeurs au plus : assez pour que l'utilisateur retrouve le problème dans son fichier.
+    examples: list[str]

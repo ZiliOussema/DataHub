@@ -63,6 +63,22 @@ Fichier CSV français de 52 Mo, huit colonnes des quatre types, cases vides comp
 
 La mémoire du backend reste plate du début à la fin : le fichier n'est jamais chargé en entier, seul un lot de 10 000 lignes est en mémoire à la fois.
 
+## Correction du type d'une colonne
+
+Une colonne d'un import prêt peut changer de type après l'import. **Aucune valeur n'est jamais perdue** : si une seule valeur ne peut pas être convertie, la conversion est refusée et la colonne garde son type.
+
+1. **Vérification** : `GET /api/imports/{id}/columns/{clé}/type-check?type=integer` compte les valeurs non convertibles et en renvoie trois en exemple. Rien n'est modifié.
+2. **Conversion** : `PATCH /api/imports/{id}/columns/{clé}/type` répond `202` avec un job. Le job revérifie, puis MongoDB écrit une nouvelle version avec la colonne convertie (`$out`), et l'import bascule en une seule écriture, comme après un upload. Pendant ce temps, l'ancienne version reste consultable, et aucun upload ni autre conversion ne peut démarrer sur cet import.
+
+| Vers | Accepté |
+|---|---|
+| Texte | toujours |
+| Entier | un texte au format entier de l'import, un décimal sans partie fractionnaire, un booléen (1 ou 0) |
+| Décimal | un texte au format décimal, avec virgule ou point, un entier jusqu'à 2⁵³, un booléen |
+| Booléen | un texte parmi les écritures reconnues à l'import, un nombre égal à 0 ou 1 |
+
+Un décimal n'est jamais arrondi en entier : `12.7` bloque la conversion. Un entier au-delà de 2⁵³ bloque le passage en décimal, qui ne le représenterait plus exactement. La copie `_n_{clé}` du filtre « contient » est créée en passant vers le texte et supprimée en le quittant.
+
 ## Limites connues
 
 - Le séparateur de milliers n'est pas reconnu : `1 234,50` est du texte.
