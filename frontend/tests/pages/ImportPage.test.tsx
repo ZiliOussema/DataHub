@@ -69,7 +69,7 @@ const columns = [
 
 test("importe le fichier analysé et affiche les colonnes de l'import", async () => {
   const api = fakeApi([makeImport('1', 'Ventes', 0)], columns)
-  renderWithProviders(routes, '/imports/1')
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
 
   await userEvent.upload(
     await screen.findByLabelText('Choisir un fichier'),
@@ -92,7 +92,7 @@ test('demande confirmation avant de remplacer des données, en listant les colon
     ],
   })
   const api = fakeApi([ready], columns)
-  renderWithProviders(routes, '/imports/1')
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
 
   await userEvent.upload(
     await screen.findByLabelText('Remplacer les données'),
@@ -129,7 +129,7 @@ test('affiche une barre de progression pour un import en cours', async () => {
 
 test("suit jusqu'au bout le job d'un import déjà en cours à l'ouverture de la page", async () => {
   fakeApi([makeImport('1', 'Ventes', 0, { status: 'importing', job_id: 'job-1' })], columns)
-  renderWithProviders(routes, '/imports/1')
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
 
   expect(await screen.findByRole('heading', { name: "Colonnes de l'import" })).toBeInTheDocument()
 })
@@ -143,7 +143,7 @@ const ventesPretes = () =>
 
 test('refuse un changement de type qui perdrait des valeurs, en montrant lesquelles', async () => {
   const api = fakeApi([ventesPretes()], [], { invalid_count: 3, examples: ['1,5', 'N/A', '12.7'] })
-  renderWithProviders(routes, '/imports/1')
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
 
   await userEvent.selectOptions(await screen.findByLabelText('Type de Montant'), 'integer')
 
@@ -156,7 +156,7 @@ test('refuse un changement de type qui perdrait des valeurs, en montrant lesquel
 
 test('convertit une colonne après confirmation', async () => {
   const api = fakeApi([ventesPretes()])
-  renderWithProviders(routes, '/imports/1')
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
 
   await userEvent.selectOptions(await screen.findByLabelText('Type de Montant'), 'integer')
   const dialog = await screen.findByRole('dialog', { name: 'Convertir « Montant » en entier ?' })

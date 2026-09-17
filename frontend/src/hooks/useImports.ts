@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
 import {
@@ -8,12 +8,15 @@ import {
   deleteImport,
   detectTypes,
   getJob,
+  getRows,
   listImports,
   renameImport,
   saveOrder,
   uploadFile,
 } from '../services/imports'
-import type { ColumnType } from '../types/imports'
+import type { ColumnType, Import, TableState } from '../types/imports'
+
+export const BLOCK_ROWS = 100
 
 const IMPORTS = ['imports']
 
@@ -107,4 +110,20 @@ export function useColumnTypeChange(importId: string) {
       onSuccess: () => client.invalidateQueries({ queryKey: IMPORTS }),
     }),
   }
+}
+
+/** Les paquets de lignes visibles d'une page, un appel à l'API par paquet de 100 lignes. */
+export function useRowBlocks(item: Import, state: TableState, offsets: number[], pageEnd: number) {
+  return useQueries({
+    queries: offsets.map((offset) => {
+      const limit = Math.min(BLOCK_ROWS, pageEnd - offset)
+      return {
+        // updated_at change à chaque réimport ou conversion : les anciens paquets ne resservent pas.
+        queryKey: ['rows', item.id, item.updated_at, state.sort, state.filters, offset, limit],
+        queryFn: () => getRows(item.id, state, offset, limit),
+        // Un paquet quitté est oublié 30 secondes plus tard : la mémoire reste à quelques centaines de lignes.
+        gcTime: 30_000,
+      }
+    }),
+  })
 }
