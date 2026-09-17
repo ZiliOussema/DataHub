@@ -61,6 +61,7 @@ test('affiche les lignes typées et le total', async () => {
     'Client 0',
     '0,5',
     'vrai',
+    '',
   ])
 })
 
@@ -159,4 +160,42 @@ test('effacer les filtres retire tous les filtres de la requête', async () => {
 
   await waitFor(() => expect([...(dataCalls(api).at(-1)?.keys() ?? [])]).toEqual(['offset', 'limit']))
   expect(screen.getByLabelText('Filtrer Nom')).toHaveValue('')
+})
+
+test("modifie une ligne après récapitulatif, sans envoyer les champs inchangés", async () => {
+  const api = fakeApi([ventes], [], undefined, lignes(3))
+  render('/imports/1?sort=nom')
+  await screen.findByText('Lignes 1 à 3 sur 3')
+  const readsBefore = dataCalls(api).length
+
+  await userEvent.click(screen.getByRole('button', { name: 'Modifier la ligne 1' }))
+  const dialog = screen.getByRole('dialog', { name: 'Modifier la ligne 1' })
+  expect(within(dialog).getByRole('button', { name: 'Vérifier les modifications' })).toBeDisabled()
+  await userEvent.clear(within(dialog).getByLabelText(/Nom/))
+  await userEvent.type(within(dialog).getByLabelText(/Nom/), 'Zoé')
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Vérifier les modifications' }))
+  expect(dialog).toHaveTextContent('Client 0Zoé')
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(api.calls.find((call) => call.method === 'PATCH')?.body).toEqual({ values: { nom: 'Zoé' } })
+  await waitFor(() => expect(dataCalls(api).length).toBeGreaterThan(readsBefore))
+  expect(screen.getByLabelText('url')).toHaveTextContent('sort=nom')
+})
+
+test('affiche sous chaque champ la raison de son refus', async () => {
+  fakeApi([ventes], [], undefined, lignes(3), { montant: 'Nombre attendu, par exemple 12,5' })
+  render()
+  await screen.findByText('Lignes 1 à 3 sur 3')
+
+  await userEvent.click(screen.getByRole('button', { name: 'Modifier la ligne 1' }))
+  const dialog = screen.getByRole('dialog')
+  const montant = within(dialog).getByLabelText(/Montant/)
+  await userEvent.clear(montant)
+  await userEvent.type(montant, 'abc')
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Vérifier les modifications' }))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+  expect(await within(dialog).findByText('Nombre attendu, par exemple 12,5')).toBeInTheDocument()
+  expect(within(dialog).getByLabelText(/Montant/)).toHaveAttribute('aria-invalid', 'true')
 })

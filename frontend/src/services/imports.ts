@@ -4,6 +4,7 @@ import type {
   DataPage,
   Import,
   Job,
+  Row,
   TableState,
   TypeCheck,
 } from '../types/imports'
@@ -60,3 +61,7 @@ export function getRows(
   }
   return request<DataPage>(`/api/imports/${id}/data?${params}`)
 }
+
+/** Modifie une ligne avec les valeurs saisies, en texte, et renvoie la ligne à jour. */
+export const updateRow = (id: string, rowId: number, values: Record<string, string>): Promise<Row> =>
+  request<Row>(`/api/imports/${id}/data/${rowId}`, json('PATCH', { values }))

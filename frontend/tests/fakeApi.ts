@@ -14,12 +14,14 @@ export interface Call {
  * `detection` est la réponse de detect-types : les colonnes, ou un message qui donne une 422.
  * `typeCheck` est la réponse de la vérification d'un changement de type.
  * `rows` sont les lignes de données : la route les découpe par offset et limit, sans filtrer.
+ * `rowErrors`, s'il n'est pas vide, fait refuser toute modification de ligne avec ces messages.
  */
 export function fakeApi(
   initial: Import[],
   detection: Column[] | string = [],
   typeCheck: TypeCheck = { invalid_count: 0, examples: [] },
   rows: Row[] = [],
+  rowErrors: Record<string, string> = {},
 ) {
   const imports = [...initial]
   const calls: Call[] = []
@@ -76,6 +78,14 @@ export function fakeApi(
       // Un import déjà en cours au départ du test se termine comme un upload.
       if (item) (finishers.get(item.id) ?? finishUpload)(item)
       return Promise.resolve(jsonResponse(makeJob(job[1], 'done')))
+    }
+
+    const rowUpdate = /^\/api\/imports\/[^/]+\/data\/(\d+)$/.exec(input)
+    if (rowUpdate && method === 'PATCH') {
+      if (Object.keys(rowErrors).length > 0) return Promise.resolve(jsonResponse({ detail: rowErrors }, 422))
+      const row = rows.find((candidate) => candidate._id === Number(rowUpdate[1]))
+      Object.assign(row ?? {}, (body as { values: Record<string, string> }).values)
+      return Promise.resolve(jsonResponse(row))
     }
 
     const data = /^\/api\/imports\/[^/]+\/data\?/.exec(input)
