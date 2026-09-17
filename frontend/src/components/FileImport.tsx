@@ -1,8 +1,9 @@
 import { useState } from 'react'
 
-import { useDetectTypes, useJob, useUploadFile } from '../hooks/useImports'
+import { useColumnTypeChange, useDetectTypes, useJob, useUploadFile } from '../hooks/useImports'
 import { ApiError } from '../services/api'
-import type { Column, Import } from '../types/imports'
+import { TYPE_LABELS, TYPE_PLURALS } from '../theme/types'
+import type { Column, ColumnType, Import } from '../types/imports'
 import ColumnsPreview from './ColumnsPreview'
 import ConfirmDialog from './ConfirmDialog'
 import FilePicker from './FilePicker'
@@ -27,6 +28,13 @@ function columnChanges(before: Column[], after: Column[]): string {
   ].join(' ')
 }
 
+/** Explique pourquoi une colonne ne peut pas changer de type, avec des valeurs fautives. */
+function refusal(count: number, examples: string[], type: ColumnType): string {
+  const values = examples.map((example) => `« ${example} »`).join(', ')
+  const subject = count === 1 ? 'valeur ne peut' : 'valeurs ne peuvent'
+  return `${NOMBRE.format(count)} ${subject} pas devenir ${TYPE_PLURALS[type]}, par exemple ${values}.`
+}
+
 /** Envoi d'un fichier dans un import : choix, aperçu des types, import et progression. */
 export default function FileImport({ item }: { item: Import }) {
   const detection = useDetectTypes(item.id)
@@ -34,7 +42,9 @@ export default function FileImport({ item }: { item: Import }) {
   // Le job de l'import en cours, y compris quand l'envoi a été fait avant de quitter la page.
   const job = useJob(upload.data?.id ?? (item.status === 'importing' ? item.job_id : null))
   const [file, setFile] = useState<File | null>(null)
+  const types = useColumnTypeChange(item.id)
   const [confirming, setConfirming] = useState(false)
+  const [target, setTarget] = useState<{ column: Column; type: ColumnType } | null>(null)
 
   const analyse = (picked: File) => {
     setFile(picked)
@@ -49,16 +59,35 @@ export default function FileImport({ item }: { item: Import }) {
     upload.mutate(file)
   }
 
+  const askTypeChange = (column: Column, type: ColumnType) => {
+    setTarget({ column, type })
+    types.change.reset()
+    types.check.mutate({ key: column.key, type })
+  }
+
+  const convert = () => {
+    if (!target) return
+    types.change.mutate({ key: target.column.key, type: target.type })
+    setTarget(null)
+  }
+
   const jobRunning = upload.isSuccess && job.data?.status !== 'done' && job.data?.status !== 'failed'
   // Tant que la liste relue n'a pas vu la fin de l'import, la barre reste à l'écran.
   if (upload.isPending || jobRunning || item.status === 'importing') {
     return <ImportProgress fileName={file?.name} job={job.data} />
   }
 
+  const checked = target ? types.check.data : undefined
   const problem =
     (detection.error && reason(detection.error, 'Fichier refusé : ')) ||
     (upload.error && reason(upload.error)) ||
-    (item.error && `Le dernier import a échoué : ${item.error}`)
+    (types.check.error && reason(types.check.error)) ||
+    (types.change.error && reason(types.change.error)) ||
+    (target &&
+      checked &&
+      checked.invalid_count > 0 &&
+      refusal(checked.invalid_count, checked.examples, target.type)) ||
+    (item.error && `Le dernier traitement a échoué : ${item.error}`)
   const alert = problem && (
     <p role="alert" className="px-4 pb-3 text-danger">
       {problem}
@@ -118,7 +147,19 @@ export default function FileImport({ item }: { item: Import }) {
           {picker ?? <FilePicker label="Remplacer les données" onPick={analyse} />}
         </div>
         {alert}
-        <ColumnsPreview columns={item.columns} />
+        {types.check.isPending && (
+          <p className="px-4 pb-3 text-texte-doux">Vérification des valeurs…</p>
+        )}
+        <ColumnsPreview columns={item.columns} onTypeChange={askTypeChange} />
+        {target && checked?.invalid_count === 0 && (
+          <ConfirmDialog
+            title={`Convertir « ${target.column.label || target.column.key} » en ${TYPE_LABELS[target.type].toLowerCase()} ?`}
+            description={`Les ${NOMBRE.format(item.row_count)} lignes sont converties dans une copie : les données restent consultables pendant le traitement.`}
+            confirmLabel="Convertir"
+            onCancel={() => setTarget(null)}
+            onConfirm={convert}
+          />
+        )}
       </section>
     )
   }

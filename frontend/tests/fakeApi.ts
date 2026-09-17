@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Column, Import, Job } from '../src/types/imports'
+import type { Column, Import, Job, TypeCheck } from '../src/types/imports'
 import { jsonResponse } from './helpers'
 
 export interface Call {
@@ -12,11 +12,25 @@ export interface Call {
 /**
  * Backend simulé : garde les imports en mémoire et enregistre les appels reçus.
  * `detection` est la réponse de detect-types : les colonnes, ou un message qui donne une 422.
+ * `typeCheck` est la réponse de la vérification d'un changement de type.
  */
-export function fakeApi(initial: Import[], detection: Column[] | string = []) {
+export function fakeApi(
+  initial: Import[],
+  detection: Column[] | string = [],
+  typeCheck: TypeCheck = { invalid_count: 0, examples: [] },
+) {
   const imports = [...initial]
   const calls: Call[] = []
   let nextId = initial.length + 1
+  // Ce que la première relecture d'un job termine : l'upload ou la conversion lancés juste avant.
+  const finishers = new Map<string, (item: Import) => void>()
+  const finishUpload = (done: Import) => {
+    Object.assign(done, {
+      status: 'ready',
+      columns: typeof detection === 'string' ? [] : detection,
+      row_count: 2,
+    })
+  }
 
   const fetchMock = vi.fn((input: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
@@ -50,20 +64,33 @@ export function fakeApi(initial: Import[], detection: Column[] | string = []) {
       if (!item) return Promise.resolve(jsonResponse({ detail: 'Import introuvable' }, 404))
       item.status = 'importing'
       item.job_id = `job-${item.id}`
+      finishers.set(item.id, finishUpload)
       return Promise.resolve(jsonResponse(makeJob(item.id, 'running'), 202))
     }
 
     const job = /^\/api\/jobs\/job-(.+)$/.exec(input)
     if (job) {
       const item = imports.find((candidate) => candidate.id === job[1])
-      if (item) {
-        Object.assign(item, {
-          status: 'ready',
-          columns: typeof detection === 'string' ? [] : detection,
-          row_count: 2,
-        })
-      }
+      // Un import déjà en cours au départ du test se termine comme un upload.
+      if (item) (finishers.get(item.id) ?? finishUpload)(item)
       return Promise.resolve(jsonResponse(makeJob(job[1], 'done')))
+    }
+
+    const checked = /^\/api\/imports\/([^/]+)\/columns\/[^/]+\/type-check\?type=/.exec(input)
+    if (checked) return Promise.resolve(jsonResponse(typeCheck))
+
+    const typeChange = /^\/api\/imports\/([^/]+)\/columns\/([^/]+)\/type$/.exec(input)
+    if (typeChange && method === 'PATCH') {
+      const item = imports.find((candidate) => candidate.id === typeChange[1])
+      if (!item) return Promise.resolve(jsonResponse({ detail: 'Import introuvable' }, 404))
+      const { type } = body as { type: Column['type'] }
+      item.status = 'importing'
+      item.job_id = `job-${item.id}`
+      finishers.set(item.id, (done) => {
+        done.status = 'ready'
+        done.columns = done.columns.map((c) => (c.key === typeChange[2] ? { ...c, type } : c))
+      })
+      return Promise.resolve(jsonResponse(makeJob(item.id, 'running'), 202))
     }
 
     const detect = /^\/api\/imports\/([^/]+)\/detect-types$/.exec(input)

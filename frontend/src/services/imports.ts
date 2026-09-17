@@ -1,4 +1,4 @@
-import type { Column, Import, Job } from '../types/imports'
+import type { Column, ColumnType, Import, Job, TypeCheck } from '../types/imports'
 import { json, request } from './api'
 
 export const listImports = (): Promise<Import[]> => request<Import[]>('/api/imports')
@@ -31,3 +31,9 @@ export function uploadFile(id: string, file: File): Promise<Job> {
 }
 
 export const getJob = (id: string): Promise<Job> => request<Job>(`/api/jobs/${id}`)
+
+export const checkColumnType = (id: string, key: string, type: ColumnType): Promise<TypeCheck> =>
+  request<TypeCheck>(`/api/imports/${id}/columns/${key}/type-check?type=${type}`)
+
+export const changeColumnType = (id: string, key: string, type: ColumnType): Promise<Job> =>
+  request<Job>(`/api/imports/${id}/columns/${key}/type`, json('PATCH', { type }))
