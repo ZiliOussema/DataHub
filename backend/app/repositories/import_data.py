@@ -2,6 +2,7 @@ import asyncio
 from typing import Any
 
 import pymongo
+from pymongo import ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.schemas.columns import ColumnType
@@ -155,3 +156,14 @@ class ImportDataRepository:
             return
         with pymongo.timeout(BACKGROUND_TIMEOUT_S):
             await data.create_index([(key, 1), ("_id", 1)])
+
+    async def update_row(
+        self, import_id: str, version: int, row_id: int, changes: Document, hidden: list[str]
+    ) -> Document | None:
+        """Modifie une ligne et la renvoie à jour, ou None si elle n'existe pas."""
+        return await self._db[collection_name(import_id, version)].find_one_and_update(
+            {"_id": row_id},
+            {"$set": changes},
+            projection={field: 0 for field in hidden} or None,
+            return_document=ReturnDocument.AFTER,
+        )

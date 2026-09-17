@@ -86,3 +86,49 @@ def test_invalid_requests_are_rejected(client: TestClient) -> None:
     assert read(client, import_id, limit=501).status_code == 422
     assert read(client, empty_id).status_code == 409
     assert read(client, UNKNOWN_ID).status_code == 404
+
+
+def update(client: TestClient, import_id: str, row_id: int | str, values: dict[str, str]) -> Any:
+    """Modifie une ligne et renvoie la réponse brute."""
+    return client.patch(f"/api/imports/{import_id}/data/{row_id}", json={"values": values})
+
+
+def test_update_reads_values_like_the_import_and_keeps_the_text_searchable(
+    client: TestClient,
+) -> None:
+    import_id = ready_import(client)
+
+    response = update(
+        client, import_id, 1, {"nom": " Zoé ", "age": "35", "montant": "12,5", "actif": ""}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"_id": 1, "nom": "Zoé", "age": 35, "montant": 12.5, "actif": None}
+    assert ids(read(client, import_id, **{"f.nom": "zoe"})) == [1]
+    assert ids(read(client, import_id, **{"f.nom": "farid"})) == []
+
+
+def test_update_returns_one_message_per_refused_field(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    response = update(
+        client, import_id, 0, {"age": "12.5", "actif": "peut-être", "inconnue": "x", "nom": "Ok"}
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["detail"]) == {"age", "actif", "inconnue"}
+    assert read(client, import_id).json()["rows"][0]["nom"] == "Élodie"
+
+
+def test_update_is_refused_during_a_treatment_and_on_unknown_targets(
+    client: TestClient, test_db: Db
+) -> None:
+    import_id = ready_import(client)
+
+    assert update(client, import_id, 999, {"nom": "X"}).status_code == 404
+    assert update(client, UNKNOWN_ID, 0, {"nom": "X"}).status_code == 404
+    assert update(client, import_id, 0, {}).status_code == 422
+    empty_id = str(client.post("/api/imports", json={"name": "Vide"}).json()["id"])
+    assert update(client, empty_id, 0, {"nom": "X"}).status_code == 409
+    test_db["imports"].update_one({"name": "Ventes"}, {"$set": {"status": "importing"}})
+    assert update(client, import_id, 0, {"nom": "X"}).status_code == 409
