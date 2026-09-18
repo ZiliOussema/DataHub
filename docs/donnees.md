@@ -25,6 +25,8 @@ L'URL de la page garde tout l'état du tableau : `?tab=donnees&page=2&size=50&so
 
 Les filtres texte et numériques attendent 300 ms après la dernière frappe avant d'appeler l'API. Au-delà de 10 millions de pixels, hauteur que les navigateurs refusent, la barre de défilement est comprimée et la position réelle recalculée.
 
+La sélection se fait en cochant des lignes, ou d'un coup avec la case de l'en-tête, qui vise **toutes les lignes correspondant aux filtres** et non la seule page affichée. Dans ce mode, aucun numéro de ligne n'est envoyé : le serveur reçoit les filtres et écrit en une seule opération.
+
 ## Requêtes et index
 
 Le tri, le total et la politique d'index suivent les mesures de `docs/mongodb-index.md`. S'y ajoutent :

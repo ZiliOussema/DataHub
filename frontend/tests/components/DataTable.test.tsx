@@ -57,6 +57,7 @@ test('affiche les lignes typées et le total', async () => {
   expect(await screen.findByText('Lignes 1 à 3 sur 3')).toBeInTheDocument()
   const row = screen.getAllByRole('row')[1]
   expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+    '',
     '1',
     'Client 0',
     '0,5',
@@ -198,4 +199,45 @@ test('affiche sous chaque champ la raison de son refus', async () => {
 
   expect(await within(dialog).findByText('Nombre attendu, par exemple 12,5')).toBeInTheDocument()
   expect(within(dialog).getByLabelText(/Montant/)).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('modifie par lot les lignes cochées, en conservant les colonnes non touchées', async () => {
+  const api = fakeApi([ventes], [], undefined, lignes(3))
+  render()
+  await screen.findByText('Lignes 1 à 3 sur 3')
+
+  await userEvent.click(screen.getByLabelText('Sélectionner la ligne 1'))
+  await userEvent.click(screen.getByLabelText('Sélectionner la ligne 2'))
+  expect(screen.getByText('2 lignes sélectionnées')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Modifier la sélection' }))
+
+  const dialog = screen.getByRole('dialog', { name: 'Modifier 2 lignes' })
+  await userEvent.click(within(within(dialog).getByRole('group', { name: 'Montant' })).getByRole('button', { name: 'Modifier' }))
+  await userEvent.type(within(dialog).getByLabelText('Nouvelle valeur de Montant'), '12,5')
+  await userEvent.click(within(within(dialog).getByRole('group', { name: 'Nom' })).getByRole('button', { name: 'Vider' }))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Vérifier les modifications' }))
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Appliquer' }))
+
+  await screen.findByText('2 lignes modifiées')
+  expect(api.calls.find((call) => call.url.endsWith('/data/batch'))?.body).toEqual({
+    ids: [0, 1],
+    changes: { montant: { action: 'set', value: '12,5' }, nom: { action: 'clear' } },
+  })
+})
+
+test('supprime toutes les lignes filtrées sans envoyer leurs numéros', async () => {
+  const api = fakeApi([ventes], [], undefined, lignes(3))
+  render('/imports/1?f.nom=client')
+  await screen.findByText('Lignes 1 à 3 sur 3')
+
+  await userEvent.click(screen.getByLabelText('Sélectionner toutes les lignes filtrées'))
+  expect(screen.getByText('3 lignes sélectionnées')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Supprimer la sélection' }))
+  const dialog = screen.getByRole('dialog', { name: 'Supprimer 3 lignes ?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }))
+
+  await screen.findByText('3 lignes supprimées')
+  expect(api.calls.find((call) => call.url.endsWith('/data/batch-delete'))?.body).toEqual({
+    filters: { nom: 'client' },
+  })
 })

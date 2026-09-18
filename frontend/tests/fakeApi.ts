@@ -88,6 +88,12 @@ export function fakeApi(
       return Promise.resolve(jsonResponse(row))
     }
 
+    const batch = /^\/api\/imports\/[^/]+\/data\/batch(-delete)?$/.exec(input)
+    if (batch && method === 'POST') {
+      const body_ = body as { ids?: number[] }
+      return Promise.resolve(jsonResponse({ count: body_.ids ? body_.ids.length : rows.length }))
+    }
+
     const data = /^\/api\/imports\/[^/]+\/data\?/.exec(input)
     if (data) {
       const params = new URL(input, 'http://test').searchParams
