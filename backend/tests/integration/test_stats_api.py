@@ -53,6 +53,17 @@ def test_the_first_checkbox_applies_the_table_filters(client: TestClient) -> Non
     assert (body["count"], body["minimum"]) == (2, 34.0)
 
 
+def test_the_first_checkbox_unchecked_ignores_the_table_filters(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    # « 0 » est une chaîne vraie en Python : sans comparaison explicite, décocher filtrait
+    # quand même.
+    body = stats(client, import_id, "age", filtered="0", **{"f.age.min": "20"}).json()
+
+    # Le minimum est celui de toute la colonne, pas celui des lignes au-dessus de 20 ans.
+    assert (body["count"], body["minimum"]) == (3, 18.0)
+
+
 def test_the_occurrence_search_always_filters_its_table_never_the_figures(
     client: TestClient,
 ) -> None:
