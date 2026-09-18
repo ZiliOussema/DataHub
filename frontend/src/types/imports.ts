@@ -59,3 +59,29 @@ export interface TableState {
 export type Selection = { ids: number[] } | { filters: Record<string, string> }
 
 export type FieldAction = { action: 'set'; value: string } | { action: 'clear' }
+
+export interface Occurrence {
+  value: string | number | boolean
+  count: number
+}
+
+export interface Stats {
+  column: Column
+  count: number
+  distinct: number
+  minimum: number | null
+  maximum: number | null
+  average: number | null
+  true_count: number | null
+  false_count: number | null
+  occurrences: Occurrence[]
+}
+
+/** Ce que l'onglet Statistiques demande : colonne, cases à cocher, recherche, tri, page. */
+export interface StatsQuery {
+  filtered: boolean
+  search: string
+  searched: boolean
+  sort: string
+  page: number
+}
