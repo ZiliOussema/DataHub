@@ -218,4 +218,8 @@ class DataService:
         """Supprime toute la sélection. Renvoie le nombre de lignes supprimées."""
         item = await self._writable(import_id)
         query = self._selection(item, selection)
-        return await self._data.delete_rows(import_id, item["version"], query)
+        deleted = await self._data.delete_rows(import_id, item["version"], query)
+        # Le total de la fiche mentirait jusqu'au prochain import : il est retranché ici.
+        if deleted:
+            await self._imports.remove_rows(import_id, deleted)
+        return deleted

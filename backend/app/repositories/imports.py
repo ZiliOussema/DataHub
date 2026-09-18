@@ -92,7 +92,7 @@ class ImportRepository:
         oid = _object_id(import_id)
         if oid is None or (await self._imports.delete_one({"_id": oid})).deleted_count == 0:
             return False
-        pattern = f"^(import_data|stats|stats_cache)_{oid}(_|$)"
+        pattern = f"^import_data_{oid}_"
         for name in await self._db.list_collection_names(filter={"name": {"$regex": pattern}}):
             await self._db.drop_collection(name)
         return True
@@ -136,6 +136,13 @@ class ImportRepository:
                     "updated_at": datetime.now(UTC),
                 }
             },
+        )
+
+    async def remove_rows(self, import_id: str, count: int) -> None:
+        """Retranche des lignes supprimées du total affiché, sans recompter la collection."""
+        await self._imports.update_one(
+            {"_id": ObjectId(import_id)},
+            {"$inc": {"row_count": -count}, "$set": {"updated_at": datetime.now(UTC)}},
         )
 
     async def fail_import(self, import_id: str, error: str) -> None:
