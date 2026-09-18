@@ -68,14 +68,16 @@ test('renomme un import', async () => {
   expect(await screen.findByRole('link', { name: 'Clients 2026' })).toBeInTheDocument()
 })
 
-test('supprime un import après confirmation', async () => {
+test('supprime un import après confirmation et oublie son tableau mémorisé', async () => {
   fakeApi([clients])
+  localStorage.setItem('datahub:tableau:1', 'page=3')
   renderWithProviders(<HomePage />)
 
   await userEvent.click(await screen.findByRole('button', { name: 'Supprimer Clients' }))
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Supprimer' }))
 
   expect(await screen.findByText('Aucun import pour le moment.')).toBeInTheDocument()
+  expect(localStorage.getItem('datahub:tableau:1')).toBeNull()
 })
 
 test('monter envoie la liste complète réordonnée', async () => {
