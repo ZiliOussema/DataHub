@@ -15,13 +15,13 @@
 
 Le préfixe `f.` évite qu'une colonne nommée « page » ou « sort » se confonde avec la pagination. Chaque clé est vérifiée contre les colonnes de l'import : une clé inconnue, une borne sur du texte ou un nombre illisible donnent une 422, et aucun opérateur venu de l'URL n'atteint MongoDB.
 
-Réponse : `{"total": 1000000, "rows": [{"_id": 0, "nom": "Élodie", "age": 34, …}]}`, où `_id` est le numéro de ligne dans le fichier. Les copies `_n_…` ne sont jamais renvoyées.
+Réponse : `{"total": 1000000, "rows": [{"_id": 0, "nom": "Élodie", "age": 34, …}]}`, où `_id` est le rang de la ligne dans le fichier, **à partir de 0** ; le tableau affiche `_id + 1`, pour que la première ligne porte le numéro 1. Les copies `_n_…` ne sont jamais renvoyées.
 
 ## Côté navigateur
 
 L'URL de la page garde tout l'état du tableau : `?tab=donnees&page=2&size=50&sort=-montant&f.ville=par`. Recharger, partager le lien ou revenir sur l'import redonne la même vue. Ouvert sans paramètre, l'import reprend le dernier état mémorisé dans le navigateur, avant la première requête. Colonnes et valeurs inconnues sont ignorées, par exemple après un réimport aux en-têtes différents.
 
-**Une page n'est jamais chargée entière.** Le tableau est virtualisé : seules les lignes à l'écran sont dessinées, et seuls leurs paquets de 100 lignes sont demandés, au fil du défilement. Un paquet quitté est oublié 30 secondes plus tard. Une page d'un million de lignes, que l'énoncé autorise, ne garde ainsi jamais plus de quelques centaines de lignes en mémoire, ce que l'énoncé exige aussi.
+**Une page n'est jamais chargée entière.** Le tableau est virtualisé : seules les lignes à l'écran sont dessinées, et seuls leurs paquets de 100 lignes sont demandés, au fil du défilement. Un paquet quitté est oublié 30 secondes plus tard. Une page réglée sur un million de lignes ne garde ainsi jamais plus de quelques centaines de lignes en mémoire : l'onglet du navigateur reste stable, quelle que soit la taille de l'import.
 
 Les filtres texte et numériques attendent 300 ms après la dernière frappe avant d'appeler l'API. Au-delà de 10 millions de pixels, hauteur que les navigateurs refusent, la barre de défilement est comprimée et la position réelle recalculée.
 

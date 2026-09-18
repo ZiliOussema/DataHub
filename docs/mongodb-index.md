@@ -70,7 +70,7 @@ Taille pour un million de documents : 166 Mo de données, 54 Mo sur disque aprè
 
 **Observation.** Non. Même avec l'index, MongoDB doit parcourir les 500 000 entrées sautées : 240 ms au lieu de 0 ms.
 
-**Décision.** Coût accepté. L'énoncé exige d'accéder à n'importe quelle page, ce que seule une pagination par numéro de page permet. Une pagination par curseur serait constante, mais n'autorise que « page suivante » et « page précédente ».
+**Décision.** Coût accepté. Atteindre directement n'importe quelle page suppose une pagination par numéro, et donc ce parcours. Une pagination par curseur serait constante, mais n'offrirait que « page suivante » et « page précédente » : l'utilisateur ne pourrait plus sauter au milieu d'un million de lignes.
 
 ### Afficher le total sans filtre (8)
 
