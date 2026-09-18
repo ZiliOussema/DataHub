@@ -82,6 +82,6 @@ Un décimal n'est jamais arrondi en entier : `12.7` bloque la conversion. Un ent
 ## Limites connues
 
 - Le séparateur de milliers n'est pas reconnu : `1 234,50` est du texte.
-- Les dates ne sont pas détectées et restent du texte ; l'énoncé demande ces quatre types.
+- Les dates ne sont pas détectées et restent du texte : la détection couvre le booléen, l'entier, le décimal et le texte. Une colonne écrite `2026-01-24` se trie donc correctement, une colonne écrite `24/01/2026` non.
 - Le fichier est lu deux fois, pour la détection puis pour l'insertion : insérer pendant la détection obligerait à écrire avant de connaître les types définitifs.
 - Un seul processus serveur est supposé : avec plusieurs, la reprise au démarrage de l'un passerait en échec les imports en cours dans un autre. Il faudrait alors une vraie file de travaux.
