@@ -7,6 +7,8 @@ import type {
   FieldAction,
   Row,
   Selection,
+  Stats,
+  StatsQuery,
   TableState,
   TypeCheck,
 } from '../types/imports'
@@ -79,3 +81,22 @@ export const batchUpdate = (
 /** Supprime une sélection. Renvoie le nombre de lignes supprimées. */
 export const batchDelete = (id: string, selection: Selection): Promise<{ count: number }> =>
   request(`/api/imports/${id}/data/batch-delete`, json('POST', selection))
+
+/** Statistiques d'une colonne. `filters` sont ceux du tableau, pour la première case. */
+export function getStats(
+  id: string,
+  key: string,
+  query: StatsQuery,
+  filters: Record<string, string>,
+): Promise<Stats> {
+  const params = new URLSearchParams({ sort: query.sort, page: String(query.page) })
+  if (query.filtered) {
+    params.set('filtered', '1')
+    for (const [name, value] of Object.entries(filters)) {
+      if (value !== '') params.set(`f.${name}`, value)
+    }
+  }
+  if (query.search) params.set('search', query.search)
+  if (query.searched) params.set('searched', '1')
+  return request<Stats>(`/api/imports/${id}/stats/${key}?${params}`)
+}

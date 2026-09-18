@@ -2,6 +2,7 @@ import { useParams, useSearchParams } from 'react-router'
 
 import DataTable from '../components/DataTable'
 import FileImport from '../components/FileImport'
+import StatsPanel from '../components/StatsPanel'
 import Statut from '../components/Statut'
 import { useImports } from '../hooks/useImports'
 
@@ -15,6 +16,7 @@ const DATE = new Intl.DateTimeFormat('fr-FR', {
 const TABS = [
   { id: 'colonnes', label: 'Colonnes' },
   { id: 'donnees', label: 'Données' },
+  { id: 'stats', label: 'Statistiques' },
 ] as const
 
 /** Page d'un import : son en-tête, puis l'envoi d'un fichier ou les colonnes en place. */
@@ -23,7 +25,8 @@ export default function ImportPage() {
   const [params, setParams] = useSearchParams()
   const { data: imports, isPending } = useImports()
   const item = imports?.find((candidate) => candidate.id === importId)
-  const tab = params.get('tab') === 'colonnes' ? 'colonnes' : 'donnees'
+  const asked = params.get('tab')
+  const tab = asked === 'colonnes' || asked === 'stats' ? asked : 'donnees'
 
   const open = (id: string) =>
     setParams(
@@ -72,11 +75,9 @@ export default function ImportPage() {
                   </button>
                 ))}
               </div>
-              {tab === 'donnees' ? (
-                <DataTable key={item.id} item={item} />
-              ) : (
-                <FileImport key={item.id} item={item} />
-              )}
+              {tab === 'donnees' && <DataTable key={item.id} item={item} />}
+              {tab === 'stats' && <StatsPanel key={item.id} item={item} />}
+              {tab === 'colonnes' && <FileImport key={item.id} item={item} />}
             </>
           ) : (
             <FileImport key={item.id} item={item} />

@@ -11,13 +11,21 @@ import {
   detectTypes,
   getJob,
   getRows,
+  getStats,
   listImports,
   renameImport,
   saveOrder,
   updateRow,
   uploadFile,
 } from '../services/imports'
-import type { ColumnType, FieldAction, Import, Selection, TableState } from '../types/imports'
+import type {
+  ColumnType,
+  FieldAction,
+  Import,
+  Selection,
+  StatsQuery,
+  TableState,
+} from '../types/imports'
 
 export const BLOCK_ROWS = 100
 
@@ -161,4 +169,18 @@ export function useRowBatch(importId: string) {
       onSuccess,
     }),
   }
+}
+
+/** Statistiques d'une colonne, relues à chaque changement de colonne, de case, de tri ou de page. */
+export function useStats(
+  item: Import,
+  key: string,
+  query: StatsQuery,
+  filters: Record<string, string>,
+) {
+  return useQuery({
+    queryKey: ['stats', item.id, item.updated_at, key, query, query.filtered ? filters : null],
+    queryFn: () => getStats(item.id, key, query, filters),
+    enabled: key !== '',
+  })
 }

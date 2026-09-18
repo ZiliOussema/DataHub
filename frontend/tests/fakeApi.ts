@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 
-import type { Column, Import, Job, Row, TypeCheck } from '../src/types/imports'
+import type { Column, Import, Job, Row, Stats, TypeCheck } from '../src/types/imports'
 import { jsonResponse } from './helpers'
 
 export interface Call {
@@ -15,6 +15,7 @@ export interface Call {
  * `typeCheck` est la réponse de la vérification d'un changement de type.
  * `rows` sont les lignes de données : la route les découpe par offset et limit, sans filtrer.
  * `rowErrors`, s'il n'est pas vide, fait refuser toute modification de ligne avec ces messages.
+ * `stats` est la réponse des statistiques, quelle que soit la colonne demandée.
  */
 export function fakeApi(
   initial: Import[],
@@ -22,6 +23,7 @@ export function fakeApi(
   typeCheck: TypeCheck = { invalid_count: 0, examples: [] },
   rows: Row[] = [],
   rowErrors: Record<string, string> = {},
+  stats: Stats | null = null,
 ) {
   const imports = [...initial]
   const calls: Call[] = []
@@ -87,6 +89,9 @@ export function fakeApi(
       Object.assign(row ?? {}, (body as { values: Record<string, string> }).values)
       return Promise.resolve(jsonResponse(row))
     }
+
+    const statsRoute = /^\/api\/imports\/[^/]+\/stats\//.exec(input)
+    if (statsRoute && stats) return Promise.resolve(jsonResponse(stats))
 
     const batch = /^\/api\/imports\/[^/]+\/data\/batch(-delete)?$/.exec(input)
     if (batch && method === 'POST') {
