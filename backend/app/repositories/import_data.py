@@ -16,6 +16,8 @@ EXAMPLES = 3
 EXACT_FLOAT = 2**53
 # Tâches de fond : copie ou index d'un million de lignes dépassent le plafond de 5 s du navigateur.
 BACKGROUND_TIMEOUT_S = 600
+# Lot : la requête attend la fin de l'écriture, qui peut porter sur un million de lignes.
+BATCH_TIMEOUT_S = 120
 # MongoDB accepte 64 index par collection, _id compris : on garde une marge.
 MAX_INDEXES = 60
 
@@ -167,3 +169,19 @@ class ImportDataRepository:
             projection={field: 0 for field in hidden} or None,
             return_document=ReturnDocument.AFTER,
         )
+
+    async def update_rows(
+        self, import_id: str, version: int, query: Document, changes: Document
+    ) -> int:
+        """Applique les mêmes valeurs à toutes les lignes visées. Renvoie le nombre de lignes."""
+        with pymongo.timeout(BATCH_TIMEOUT_S):
+            result = await self._db[collection_name(import_id, version)].update_many(
+                query, {"$set": changes}
+            )
+        return result.matched_count
+
+    async def delete_rows(self, import_id: str, version: int, query: Document) -> int:
+        """Supprime toutes les lignes visées et renvoie leur nombre."""
+        with pymongo.timeout(BATCH_TIMEOUT_S):
+            result = await self._db[collection_name(import_id, version)].delete_many(query)
+        return result.deleted_count

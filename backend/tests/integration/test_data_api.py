@@ -132,3 +132,103 @@ def test_update_is_refused_during_a_treatment_and_on_unknown_targets(
     assert update(client, empty_id, 0, {"nom": "X"}).status_code == 409
     test_db["imports"].update_one({"name": "Ventes"}, {"$set": {"status": "importing"}})
     assert update(client, import_id, 0, {"nom": "X"}).status_code == 409
+
+
+def batch(client: TestClient, import_id: str, body: dict[str, Any]) -> Any:
+    """Modifie une sélection de lignes et renvoie la réponse brute."""
+    return client.post(f"/api/imports/{import_id}/data/batch", json=body)
+
+
+def batch_delete(client: TestClient, import_id: str, body: dict[str, Any]) -> Any:
+    """Supprime une sélection de lignes et renvoie la réponse brute."""
+    return client.post(f"/api/imports/{import_id}/data/batch-delete", json=body)
+
+
+def test_batch_changes_chosen_rows_and_keeps_the_other_columns(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    response = batch(
+        client,
+        import_id,
+        {
+            "ids": [0, 1],
+            "changes": {"age": {"action": "set", "value": "50"}, "nom": {"action": "clear"}},
+        },
+    )
+
+    assert response.json() == {"count": 2}
+    rows = read(client, import_id).json()["rows"]
+    assert [(row["age"], row["nom"], row["montant"]) for row in rows[:3]] == [
+        (50, None, 12.5),
+        (50, None, 3.0),
+        (34, "Inès", 7.25),
+    ]
+
+
+def test_batch_on_filters_reaches_every_matching_row_without_listing_them(
+    client: TestClient,
+) -> None:
+    import_id = ready_import(client)
+
+    response = batch(
+        client,
+        import_id,
+        {"filters": {"age.min": "20"}, "changes": {"actif": {"action": "set", "value": "oui"}}},
+    )
+
+    assert response.json() == {"count": 2}
+    # Léo était déjà à oui dans le fichier : le lot a mis à jour Élodie et Inès.
+    assert ids(read(client, import_id, **{"f.actif": "vrai"})) == [0, 2, 3]
+
+
+def test_batch_refuses_a_value_that_does_not_match_the_column(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    response = batch(
+        client,
+        import_id,
+        {
+            "ids": [0],
+            "changes": {
+                "age": {"action": "set", "value": "12,5"},
+                "montant": {"action": "set", "value": ""},
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["detail"]) == {"age", "montant"}
+    assert read(client, import_id).json()["rows"][0]["age"] == 34
+
+
+def test_batch_delete_removes_the_rows_without_renumbering_the_others(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    response = batch_delete(client, import_id, {"ids": [0, 1]})
+
+    assert response.json() == {"count": 2}
+    body = read(client, import_id).json()
+    assert (body["total"], ids(read(client, import_id))) == (2, [2, 3])
+
+
+def test_batch_delete_on_filters_removes_every_matching_row(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    # « el » sans accent ne trouve qu'Élodie : le filtre du lot est celui du tableau.
+    assert batch_delete(client, import_id, {"filters": {"nom": "el"}}).json() == {"count": 1}
+    assert ids(read(client, import_id)) == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"changes": {"age": {"action": "clear"}}},
+        {"ids": [0], "filters": {}, "changes": {"age": {"action": "clear"}}},
+        {"ids": [0], "changes": {}},
+        {"ids": [0], "changes": {"inconnue": {"action": "clear"}}},
+    ],
+)
+def test_batch_rejects_an_ambiguous_or_empty_request(
+    client: TestClient, body: dict[str, Any]
+) -> None:
+    assert batch(client, ready_import(client), body).status_code == 422
