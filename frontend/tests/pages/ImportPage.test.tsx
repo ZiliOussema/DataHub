@@ -154,6 +154,17 @@ test('refuse un changement de type qui perdrait des valeurs, en montrant lesquel
   expect(api.calls.some((call) => call.method === 'PATCH')).toBe(false)
 })
 
+test("une seule valeur fautive s'accorde au singulier", async () => {
+  fakeApi([ventesPretes()], [], { invalid_count: 1, examples: ['1,5'] })
+  renderWithProviders(routes, '/imports/1?tab=colonnes')
+
+  await userEvent.selectOptions(await screen.findByLabelText('Type de Montant'), 'integer')
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '1 valeur ne peut pas devenir un entier, par exemple « 1,5 ».',
+  )
+})
+
 test('convertit une colonne après confirmation', async () => {
   const api = fakeApi([ventesPretes()])
   renderWithProviders(routes, '/imports/1?tab=colonnes')

@@ -18,13 +18,23 @@ TYPE_NAMES: dict[ColumnType, str] = {
     "string": "du texte",
 }
 
+# Une seule valeur fautive : « ne peut pas devenir un entier », et non « des entiers ».
+TYPE_NAMES_ONE: dict[ColumnType, str] = {
+    "boolean": "un booléen",
+    "integer": "un entier",
+    "float": "un décimal",
+    "string": "du texte",
+}
+
 
 def refusal(count: int, examples: list[str], target: ColumnType) -> str:
     """Message qui explique pourquoi une colonne ne peut pas changer de type."""
     values = ", ".join(f"« {example} »" for example in examples)
-    verb = "ne peut pas devenir" if count == 1 else "ne peuvent pas devenir"
-    noun = "valeur" if count == 1 else "valeurs"
-    return f"{count} {noun} {verb} {TYPE_NAMES[target]}, par exemple {values}"
+    one = count == 1
+    verb = "ne peut pas devenir" if one else "ne peuvent pas devenir"
+    noun = "valeur" if one else "valeurs"
+    name = TYPE_NAMES_ONE[target] if one else TYPE_NAMES[target]
+    return f"{count} {noun} {verb} {name}, par exemple {values}"
 
 
 class ColumnTypeService:
