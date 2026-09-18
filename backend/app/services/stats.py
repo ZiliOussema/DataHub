@@ -54,8 +54,12 @@ class StatsService:
             raise NotFoundError("Colonne introuvable")
 
         # Case 1 : les statistiques portent sur les lignes que le tableau afficherait.
+        # Comparaison à « 1 » : en Python la chaîne « 0 » est vraie, et cocher puis décocher
+        # une case laisse « filtered=0 » dans une URL partagée.
         filters = (
-            build_query(item["columns"], None, params).filter if params.get("filtered") else {}
+            build_query(item["columns"], None, params).filter
+            if params.get("filtered") == "1"
+            else {}
         )
         # Le filtre du tableau des occurrences restreint toujours ce tableau.
         search = params.get("search", "").strip()
@@ -64,7 +68,7 @@ class StatsService:
             contains = {f"_n_{key}": {"$regex": re.escape(normalize_text(search))}}
             occurrences = {"$and": [filters, contains]} if filters else contains
         # Case 2 : les chiffres du haut suivent ce filtre, au lieu de porter sur toute la colonne.
-        summarized = occurrences if params.get("searched") else filters
+        summarized = occurrences if params.get("searched") == "1" else filters
 
         sort = OCCURRENCE_SORTS.get(params.get("sort", "-count"))
         if sort is None:
