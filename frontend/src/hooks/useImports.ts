@@ -56,7 +56,18 @@ export function useImportMutations() {
       mutationFn: ({ id, name }: { id: string; name: string }) => renameImport(id, name),
       onSuccess,
     }),
-    remove: useMutation({ mutationFn: deleteImport, onSuccess }),
+    remove: useMutation({
+      mutationFn: deleteImport,
+      onSuccess: async (_, importId) => {
+        // L'état du tableau mémorisé n'a plus d'objet : l'identifiant ne sera jamais réattribué.
+        try {
+          localStorage.removeItem(`datahub:tableau:${importId}`)
+        } catch {
+          // Stockage indisponible : rien à nettoyer.
+        }
+        await onSuccess()
+      },
+    }),
     reorder: useMutation({ mutationFn: saveOrder, onSuccess }),
   }
 }
