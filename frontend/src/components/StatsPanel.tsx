@@ -4,16 +4,24 @@ import { useStats } from '../hooks/useImports'
 import { useTableState } from '../hooks/useTableState'
 import { ApiError } from '../services/api'
 import { TYPE_LABELS } from '../theme/types'
-import type { Import, Stats } from '../types/imports'
+import type { ColumnType, Import, Occurrence, Stats } from '../types/imports'
 
 const NOMBRE = new Intl.NumberFormat('fr-FR')
 const DECIMAL = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 })
+// Les chiffres sont arrondis à deux décimales ; une valeur du fichier garde les siennes.
+const VALEUR = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 6 })
 const PAR_PAGE = 20
 const DEBOUNCE_MS = 300
 
 const entete = 'px-4 py-2.5 text-[11px] font-semibold tracking-[0.05em] text-texte-doux uppercase'
 const bouton =
   'h-8 rounded-sm border border-bordure bg-surface px-3 font-medium hover:bg-survol disabled:cursor-not-allowed disabled:opacity-45'
+
+/** Valeur d'occurrence, écrite comme la même valeur dans le tableau de données. */
+function valeur(value: Occurrence['value'], type: ColumnType) {
+  if (typeof value === 'boolean') return value ? 'vrai' : 'faux'
+  return type === 'float' && typeof value === 'number' ? VALEUR.format(value) : String(value)
+}
 
 /** Chiffres à afficher selon le type de la colonne. */
 function figures(stats: Stats): [string, string][] {
@@ -187,7 +195,7 @@ export default function StatsPanel({ item }: { item: Import }) {
               {stats.data.occurrences.map(({ value, count }) => (
                 <tr key={String(value)} className="hover:bg-survol">
                   <td className="border-b border-filet px-4 py-2">
-                    {typeof value === 'boolean' ? (value ? 'vrai' : 'faux') : String(value)}
+                    {valeur(value, stats.data.column.type)}
                   </td>
                   <td className="border-b border-filet px-4 py-2 text-right">
                     {NOMBRE.format(count)}

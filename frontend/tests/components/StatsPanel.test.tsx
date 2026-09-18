@@ -18,6 +18,7 @@ const ventes: Import = makeImport('1', 'Ventes', 0, {
   columns: [
     { label: 'Ville', key: 'ville', type: 'string' },
     { label: 'Âge', key: 'age', type: 'integer' },
+    { label: 'Montant', key: 'montant', type: 'float' },
   ],
 })
 
@@ -52,6 +53,26 @@ test("affiche le compte, les valeurs distinctes et le tableau des occurrences d'
   expect(await screen.findByText('1 000')).toBeInTheDocument()
   const row = (await screen.findAllByRole('row'))[1]
   expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(['Évry', '700'])
+})
+
+test("une valeur décimale s'écrit comme dans le tableau de données", async () => {
+  const montants = stats({
+    column: { label: 'Montant', key: 'montant', type: 'float' },
+    occurrences: [{ value: 2419.66, count: 4 }],
+  })
+  fakeApi([ventes], [], undefined, [], {}, montants)
+  renderWithProviders(
+    <Routes>
+      <Route path="/imports/:importId" element={<StatsPanel item={ventes} />} />
+    </Routes>,
+    '/imports/1',
+  )
+
+  await userEvent.selectOptions(await screen.findByLabelText('Colonne'), 'montant')
+
+  // Sans mise en forme, la valeur sortirait en « 2419.66 » alors que le tableau écrit « 2 419,66 ».
+  const row = (await screen.findAllByRole('row'))[1]
+  expect(within(row).getByText('2 419,66')).toBeInTheDocument()
 })
 
 test("les chiffres d'un nombre sont le compte, le minimum, le maximum et la moyenne", async () => {
