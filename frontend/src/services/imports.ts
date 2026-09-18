@@ -4,7 +4,9 @@ import type {
   DataPage,
   Import,
   Job,
+  FieldAction,
   Row,
+  Selection,
   TableState,
   TypeCheck,
 } from '../types/imports'
@@ -65,3 +67,15 @@ export function getRows(
 /** Modifie une ligne avec les valeurs saisies, en texte, et renvoie la ligne à jour. */
 export const updateRow = (id: string, rowId: number, values: Record<string, string>): Promise<Row> =>
   request<Row>(`/api/imports/${id}/data/${rowId}`, json('PATCH', { values }))
+
+/** Applique les mêmes changements à une sélection. Renvoie le nombre de lignes concernées. */
+export const batchUpdate = (
+  id: string,
+  selection: Selection,
+  changes: Record<string, FieldAction>,
+): Promise<{ count: number }> =>
+  request(`/api/imports/${id}/data/batch`, json('POST', { ...selection, changes }))
+
+/** Supprime une sélection. Renvoie le nombre de lignes supprimées. */
+export const batchDelete = (id: string, selection: Selection): Promise<{ count: number }> =>
+  request(`/api/imports/${id}/data/batch-delete`, json('POST', selection))

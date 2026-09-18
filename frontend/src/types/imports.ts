@@ -54,3 +54,8 @@ export interface TableState {
   /** Clé du filtre sans le préfixe f. : « ville », « age.min », « actif ». */
   filters: Record<string, string>
 }
+
+/** Sélection de lignes : des numéros cochés, ou tout ce qui correspond aux filtres. */
+export type Selection = { ids: number[] } | { filters: Record<string, string> }
+
+export type FieldAction = { action: 'set'; value: string } | { action: 'clear' }

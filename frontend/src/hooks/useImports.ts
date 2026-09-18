@@ -2,6 +2,8 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useEffect } from 'react'
 
 import {
+  batchDelete,
+  batchUpdate,
   changeColumnType,
   checkColumnType,
   createImport,
@@ -15,7 +17,7 @@ import {
   updateRow,
   uploadFile,
 } from '../services/imports'
-import type { ColumnType, Import, TableState } from '../types/imports'
+import type { ColumnType, FieldAction, Import, Selection, TableState } from '../types/imports'
 
 export const BLOCK_ROWS = 100
 
@@ -137,4 +139,26 @@ export function useRowUpdate(importId: string) {
       updateRow(importId, rowId, values),
     onSuccess: () => client.invalidateQueries({ queryKey: ['rows', importId] }),
   })
+}
+
+/** Modification et suppression par lot. Les paquets de lignes de l'import sont relus ensuite. */
+export function useRowBatch(importId: string) {
+  const client = useQueryClient()
+  const onSuccess = () => client.invalidateQueries({ queryKey: ['rows', importId] })
+  return {
+    update: useMutation({
+      mutationFn: ({
+        selection,
+        changes,
+      }: {
+        selection: Selection
+        changes: Record<string, FieldAction>
+      }) => batchUpdate(importId, selection, changes),
+      onSuccess,
+    }),
+    remove: useMutation({
+      mutationFn: (selection: Selection) => batchDelete(importId, selection),
+      onSuccess,
+    }),
+  }
 }

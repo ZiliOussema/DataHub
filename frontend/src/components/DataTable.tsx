@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { BLOCK_ROWS, useRowBlocks } from '../hooks/useImports'
+import { BLOCK_ROWS, useRowBatch, useRowBlocks } from '../hooks/useImports'
 import { useTableState } from '../hooks/useTableState'
 import { ApiError } from '../services/api'
 import { TYPE_LABELS } from '../theme/types'
-import type { Column, Import, Row, TableState } from '../types/imports'
+import type { Column, Import, Row, Selection, TableState } from '../types/imports'
+import BatchEditor from './BatchEditor'
+import ConfirmDialog from './ConfirmDialog'
 import Pagination from './Pagination'
 import RowEditor from './RowEditor'
 import Icon from './icons'
@@ -17,15 +19,20 @@ const OVERSCAN = 10
 const MAX_SCROLL = 10_000_000
 const DEBOUNCE_MS = 300
 const DECIMAL = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 6 })
+const NOMBRE = new Intl.NumberFormat('fr-FR')
 
 const entete = 'px-3 py-2 text-[11px] font-semibold tracking-[0.05em] text-texte-doux uppercase'
 const champ =
   'h-7 w-full min-w-0 rounded-sm border border-filet bg-survol px-2 text-xs focus:border-bleu focus:bg-surface focus:outline-none'
 
 const grid = (columns: Column[]) => ({
-  gridTemplateColumns: `72px repeat(${columns.length}, minmax(150px, 1fr)) 44px`,
+  gridTemplateColumns: `34px 72px repeat(${columns.length}, minmax(150px, 1fr)) 44px`,
 })
 const numeric = (column: Column) => column.type === 'integer' || column.type === 'float'
+const coche = 'h-3.5 w-3.5 accent-rouge'
+const bouton = 'h-8 rounded-sm border border-bordure bg-surface px-3 font-medium hover:bg-survol'
+const danger =
+  'h-8 rounded-sm border border-[#E2B4B1] bg-surface px-3 font-medium text-rouge-fonce hover:bg-[#FCF3F3]'
 
 /** Valeur d'une cellule, écrite selon le type de sa colonne. */
 function display(value: Row[string] | undefined, column: Column) {
@@ -80,10 +87,23 @@ interface BodyProps {
   pageRows: number
   head: Row[] | undefined
   onEdit: (row: Row) => void
+  selected: Set<number>
+  everything: boolean
+  onToggle: (id: number) => void
 }
 
 /** Lignes visibles de la page, chargées par paquets de 100 au fil du défilement. */
-function Body({ item, state, pageStart, pageRows, head, onEdit }: BodyProps) {
+function Body({
+  item,
+  state,
+  pageStart,
+  pageRows,
+  head,
+  onEdit,
+  selected,
+  everything,
+  onToggle,
+}: BodyProps) {
   const [scrollTop, setScrollTop] = useState(0)
   const fullHeight = pageRows * ROW_HEIGHT
   const height = Math.min(fullHeight, MAX_SCROLL)
@@ -121,6 +141,18 @@ function Body({ item, state, pageStart, pageRows, head, onEdit }: BodyProps) {
                 top: index * ROW_HEIGHT - virtualTop + scrollTop,
               }}
             >
+              <div role="cell" className="flex justify-center">
+                {row && (
+                  <input
+                    type="checkbox"
+                    className={coche}
+                    checked={everything || selected.has(row._id)}
+                    disabled={everything}
+                    onChange={() => onToggle(row._id)}
+                    aria-label={`Sélectionner la ligne ${row._id + 1}`}
+                  />
+                )}
+              </div>
               <div role="cell" className="px-3 text-right text-texte-doux">
                 {row ? row._id + 1 : ''}
               </div>
@@ -161,12 +193,37 @@ function Body({ item, state, pageStart, pageRows, head, onEdit }: BodyProps) {
 export default function DataTable({ item }: { item: Import }) {
   const { state, update } = useTableState(item.id, item.columns)
   const [editing, setEditing] = useState<Row | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [everything, setEverything] = useState(false)
+  const [batch, setBatch] = useState<'edit' | 'delete' | null>(null)
+  const [done, setDone] = useState('')
+  const { remove } = useRowBatch(item.id)
   const pageStart = (state.page - 1) * state.size
   // Le premier paquet de la page donne le total : il est toujours demandé.
   const [head] = useRowBlocks(item, state, [pageStart], pageStart + state.size)
   const total = head.data?.total
   const pageRows = total === undefined ? 0 : Math.max(0, Math.min(state.size, total - pageStart))
   const filtered = Object.values(state.filters).some((value) => value !== '')
+  const count = everything ? (total ?? 0) : selected.size
+  // Tout sélectionner vise les filtres, donc toutes les lignes du résultat, pas seulement la page.
+  const selection: Selection = everything ? { filters: state.filters } : { ids: [...selected] }
+
+  const clear = () => {
+    setSelected(new Set())
+    setEverything(false)
+    setBatch(null)
+  }
+
+  const toggle = (id: number) => {
+    const next = new Set(selected)
+    if (!next.delete(id)) next.add(id)
+    setSelected(next)
+  }
+
+  const finish = (changed: number, verb: string) => {
+    setDone(`${NOMBRE.format(changed)} ligne${changed > 1 ? 's' : ''} ${verb}`)
+    clear()
+  }
 
   const setFilter = (name: string, value: string) =>
     update({ filters: { ...state.filters, [name]: value } })
@@ -241,6 +298,9 @@ export default function DataTable({ item }: { item: Import }) {
         pageRows={pageRows}
         head={head.data?.rows}
         onEdit={setEditing}
+        selected={selected}
+        everything={everything}
+        onToggle={toggle}
       />
     )
   }
@@ -258,13 +318,42 @@ export default function DataTable({ item }: { item: Import }) {
           </button>
         </div>
       )}
+      {count > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-bordure bg-[#FDF5F6] px-4 py-2">
+          <span className="font-semibold">
+            {NOMBRE.format(count)} ligne{count > 1 ? 's' : ''} sélectionnée{count > 1 ? 's' : ''}
+          </span>
+          <button type="button" onClick={() => setBatch('edit')} className={bouton}>
+            Modifier la sélection
+          </button>
+          <button type="button" onClick={() => setBatch('delete')} className={danger}>
+            Supprimer la sélection
+          </button>
+          <button type="button" onClick={clear} className="px-2 text-texte-doux hover:underline">
+            Tout désélectionner
+          </button>
+        </div>
+      )}
+      {done && <p className="border-b border-bordure px-4 py-2 text-succes">{done}</p>}
       <div role="table" aria-label="Données de l'import" className="overflow-x-auto">
-        <div style={{ minWidth: 72 + item.columns.length * 150 + 44 }}>
+        <div style={{ minWidth: 34 + 72 + item.columns.length * 150 + 44 }}>
           <div
             role="row"
             className="grid border-b border-bordure bg-survol"
             style={grid(item.columns)}
           >
+            <div role="columnheader" className="flex justify-center py-2">
+              <input
+                type="checkbox"
+                className={coche}
+                checked={everything}
+                onChange={() => {
+                  setSelected(new Set())
+                  setEverything(!everything)
+                }}
+                aria-label="Sélectionner toutes les lignes filtrées"
+              />
+            </div>
             <div role="columnheader" className={`${entete} text-right`}>
               Ligne
             </div>
@@ -308,6 +397,7 @@ export default function DataTable({ item }: { item: Import }) {
           </div>
           <div className="grid border-b border-bordure py-1.5" style={grid(item.columns)}>
             <div />
+            <div />
             {item.columns.map((column) => (
               <div key={column.key} className="px-2">
                 {filter(column)}
@@ -320,6 +410,26 @@ export default function DataTable({ item }: { item: Import }) {
       </div>
       <Pagination state={state} total={total} onChange={update} />
       {editing && <RowEditor item={item} row={editing} onClose={() => setEditing(null)} />}
+      {batch === 'edit' && (
+        <BatchEditor
+          item={item}
+          selection={selection}
+          count={count}
+          onClose={() => setBatch(null)}
+          onDone={(changed) => finish(changed, 'modifiées')}
+        />
+      )}
+      {batch === 'delete' && (
+        <ConfirmDialog
+          title={`Supprimer ${NOMBRE.format(count)} ligne${count > 1 ? 's' : ''} ?`}
+          description="Les lignes supprimées ne peuvent pas être récupérées."
+          confirmLabel="Supprimer"
+          onCancel={() => setBatch(null)}
+          onConfirm={() =>
+            remove.mutate(selection, { onSuccess: (result) => finish(result.count, 'supprimées') })
+          }
+        />
+      )}
     </section>
   )
 }
