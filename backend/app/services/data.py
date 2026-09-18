@@ -2,12 +2,13 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import cast
 
 from app.core.errors import ConflictError, FieldErrors, InvalidError, NotFoundError
 from app.repositories.import_data import ImportDataRepository
 from app.repositories.imports import Document, ImportRepository
 from app.schemas.columns import ColumnType
-from app.schemas.data import DataPage
+from app.schemas.data import BatchChange, DataPage, RowSelection
 from app.services.columns import normalize_text
 from app.services.conversion import TRUE_VALUES
 from app.services.imports import NOT_FOUND
@@ -101,6 +102,37 @@ def build_query(columns: list[Document], sort: str | None, params: Mapping[str, 
     return DataQuery(conditions, order, indexable, _hidden(types))
 
 
+def _changes(types: Mapping[str, str], values: Mapping[str, str | None], empty: bool) -> Document:
+    """Valeurs lues selon le type de leur colonne, prêtes pour un $set. Lève FieldErrors.
+
+    Une valeur None efface la colonne. `empty` autorise une saisie vide à effacer aussi.
+    """
+    changes: Document = {}
+    errors: dict[str, str] = {}
+    for key, text in values.items():
+        if key not in types:
+            errors[key] = "Colonne inconnue"
+            continue
+        value: object = None
+        if text is not None:
+            try:
+                # Le type vient du document de l'import, donc toujours l'un des quatre connus.
+                value = parse_cell(text, cast(ColumnType, types[key]))
+            except ValueError as exc:
+                errors[key] = str(exc)
+                continue
+            if value is None and not empty:
+                errors[key] = "Saisissez une valeur, ou choisissez de la vider"
+                continue
+        changes[key] = value
+        if types[key] == "string":
+            # La copie suit la valeur, sinon « contient » ne retrouverait plus la ligne.
+            changes[f"_n_{key}"] = normalize_text(value) if isinstance(value, str) else None
+    if errors:
+        raise FieldErrors(errors)
+    return changes
+
+
 class DataService:
     """Lecture des données d'un import : filtres, tri, pagination par paquets."""
 
@@ -131,11 +163,8 @@ class DataService:
         for key in keys:
             await self._data.ensure_index(import_id, version, key)
 
-    async def update_row(self, import_id: str, row_id: int, values: Mapping[str, str]) -> Document:
-        """Modifie une ligne, chaque valeur lue selon le type de sa colonne.
-
-        Lève NotFoundError, ConflictError pendant un traitement, FieldErrors sur une valeur refusée.
-        """
+    async def _writable(self, import_id: str) -> Document:
+        """Renvoie un import dont les données peuvent être modifiées. Lève 404 ou 409."""
         item = await self._imports.get(import_id)
         if item is None:
             raise NotFoundError(NOT_FOUND)
@@ -144,24 +173,24 @@ class DataService:
             raise ConflictError("Un traitement est en cours sur cet import")
         if not item.get("version"):
             raise ConflictError("Cet import n'a pas encore de données")
+        return item
+
+    def _selection(self, item: Document, selection: RowSelection) -> Document:
+        """Filtre MongoDB d'une sélection : des numéros de ligne, ou les filtres du tableau."""
+        if selection.ids is not None:
+            return {"_id": {"$in": selection.ids}}
+        filters = selection.filters or {}
+        params = {f"{FILTER_PREFIX}{name}": value for name, value in filters.items()}
+        return build_query(item["columns"], None, params).filter
+
+    async def update_row(self, import_id: str, row_id: int, values: Mapping[str, str]) -> Document:
+        """Modifie une ligne, chaque valeur lue selon le type de sa colonne.
+
+        Lève NotFoundError, ConflictError pendant un traitement, FieldErrors sur une valeur refusée.
+        """
+        item = await self._writable(import_id)
         types = {column["key"]: column["type"] for column in item["columns"]}
-        changes: Document = {}
-        errors: dict[str, str] = {}
-        for key, text in values.items():
-            if key not in types:
-                errors[key] = "Colonne inconnue"
-                continue
-            try:
-                value = parse_cell(text, types[key])
-            except ValueError as exc:
-                errors[key] = str(exc)
-                continue
-            changes[key] = value
-            if types[key] == "string":
-                # La copie suit la valeur, sinon « contient » ne retrouverait plus la ligne.
-                changes[f"_n_{key}"] = normalize_text(value) if isinstance(value, str) else None
-        if errors:
-            raise FieldErrors(errors)
+        changes = _changes(types, values, empty=True)
         if not changes:
             raise InvalidError("Aucune valeur à modifier")
         row = await self._data.update_row(
@@ -170,3 +199,23 @@ class DataService:
         if row is None:
             raise NotFoundError("Ligne introuvable")
         return row
+
+    async def update_rows(self, import_id: str, body: BatchChange) -> int:
+        """Applique les mêmes changements à toute la sélection. Renvoie le nombre de lignes."""
+        item = await self._writable(import_id)
+        types = {column["key"]: column["type"] for column in item["columns"]}
+        values = {
+            key: None if change.action == "clear" else change.value
+            for key, change in body.changes.items()
+        }
+        changes = _changes(types, values, empty=False)
+        if not changes:
+            raise InvalidError("Aucune colonne à modifier")
+        query = self._selection(item, body)
+        return await self._data.update_rows(import_id, item["version"], query, changes)
+
+    async def delete_rows(self, import_id: str, selection: RowSelection) -> int:
+        """Supprime toute la sélection. Renvoie le nombre de lignes supprimées."""
+        item = await self._writable(import_id)
+        query = self._selection(item, selection)
+        return await self._data.delete_rows(import_id, item["version"], query)

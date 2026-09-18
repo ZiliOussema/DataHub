@@ -43,6 +43,21 @@ Le tri, le total et la politique d'index suivent les mesures de `docs/mongodb-in
 - La copie `_n_…` d'une colonne de texte est mise à jour avec la valeur, pour que le filtre « contient » retrouve la ligne.
 - Refusée en 409 pendant un réimport ou une conversion : écrite dans la version remplacée, elle serait perdue à la bascule.
 
+## Modification et suppression par lot
+
+`POST /api/imports/{id}/data/batch` et `POST /api/imports/{id}/data/batch-delete` agissent sur une sélection, décrite de l'une des deux façons, jamais les deux à la fois :
+
+- `"ids": [3, 8, 42]` : des lignes choisies à la main, **10 000 au plus** ;
+- `"filters": {"ville": "evry", "age.min": "18"}` : toutes les lignes que le tableau afficherait avec ces filtres. Rien n'est listé côté navigateur, et MongoDB écrit en une seule opération, même sur un million de lignes.
+
+Pour la modification, chaque colonne reçoit une action : absente elle est **conservée**, `{"action": "set", "value": "35"}` la **remplace**, `{"action": "clear"}` la **vide**. Une valeur vide avec `set` est refusée, l'action `clear` existe pour cela. Les valeurs sont lues et refusées comme pour une ligne.
+
+La réponse est `{"count": 80000}`, le nombre de lignes **concernées** par la sélection, et non le nombre de valeurs réellement changées : une ligne qui avait déjà la valeur demandée est comptée.
+
+Une suppression ne renumérote pas les lignes restantes : le numéro de ligne est celui du fichier d'origine, et il sert d'identifiant. Le total, lui, diminue.
+
+Limite : contrairement à un import, une écriture par lot ne passe pas par une copie. Un arrêt du serveur en plein traitement laisserait une partie des lignes modifiées. Le délai est plafonné à deux minutes.
+
 ## Limites connues
 
 Un tri sur une colonne combiné à un filtre sur une autre n'utilise qu'un des deux index. Les autres limites de lecture sont listées dans `docs/mongodb-index.md`.
