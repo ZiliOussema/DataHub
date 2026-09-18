@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Route, Routes, useLocation } from 'react-router'
@@ -64,6 +64,19 @@ test('affiche les lignes typées et le total', async () => {
     'vrai',
     '',
   ])
+})
+
+test('un tableau vide dit si le filtre exclut tout ou si l\'import est vide', async () => {
+  fakeApi([ventes], [], undefined, [])
+  render()
+
+  expect(await screen.findByText('Cet import ne contient aucune ligne.')).toBeInTheDocument()
+
+  cleanup()
+  fakeApi([ventes], [], undefined, [])
+  render('/imports/1?f.nom=introuvable')
+
+  expect(await screen.findByText('Aucune ligne ne correspond aux filtres.')).toBeInTheDocument()
 })
 
 test("reprend la page, la taille, le tri et les filtres écrits dans l'URL", async () => {

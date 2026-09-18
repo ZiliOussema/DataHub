@@ -282,9 +282,11 @@ export default function DataTable({ item }: { item: Import }) {
   } else if (total !== undefined && pageRows === 0) {
     body = (
       <p className="px-4 py-8 text-center text-texte-doux">
-        {total === 0
-          ? 'Aucune ligne ne correspond aux filtres.'
-          : 'Cette page est au-delà des résultats.'}
+        {total !== 0
+          ? 'Cette page est au-delà des résultats.'
+          : Object.values(state.filters).some((value) => value !== '')
+            ? 'Aucune ligne ne correspond aux filtres.'
+            : 'Cet import ne contient aucune ligne.'}
       </p>
     )
   } else {
