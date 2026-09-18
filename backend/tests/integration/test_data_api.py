@@ -211,6 +211,16 @@ def test_batch_delete_removes_the_rows_without_renumbering_the_others(client: Te
     assert (body["total"], ids(read(client, import_id))) == (2, [2, 3])
 
 
+def test_batch_delete_lowers_the_row_count_shown_on_the_import(client: TestClient) -> None:
+    import_id = ready_import(client)
+
+    batch_delete(client, import_id, {"ids": [0, 1]})
+
+    # Sans ce report, la fiche annonce encore 4 lignes quand le tableau n'en montre que 2.
+    listed = next(i for i in client.get("/api/imports").json() if i["id"] == import_id)
+    assert listed["row_count"] == 2
+
+
 def test_batch_delete_on_filters_removes_every_matching_row(client: TestClient) -> None:
     import_id = ready_import(client)
 

@@ -177,7 +177,11 @@ export function useRowBatch(importId: string) {
     }),
     remove: useMutation({
       mutationFn: (selection: Selection) => batchDelete(importId, selection),
-      onSuccess,
+      // La fiche de l'import porte aussi le nombre de lignes, que la suppression vient de changer.
+      onSuccess: async () => {
+        await onSuccess()
+        await client.invalidateQueries({ queryKey: IMPORTS })
+      },
     }),
   }
 }

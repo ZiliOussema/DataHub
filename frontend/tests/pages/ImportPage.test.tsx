@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { Route, Routes } from 'react-router'
@@ -140,6 +140,30 @@ const ventesPretes = () =>
     row_count: 1500,
     columns: [{ label: 'Montant', key: 'montant', type: 'float' }],
   })
+
+test("une suppression par lot fait relire la fiche, qui porte le nombre de lignes", async () => {
+  const lignes = [
+    { _id: 0, montant: 1.5 },
+    { _id: 1, montant: 2.5 },
+  ]
+  const api = fakeApi([ventesPretes()], [], undefined, lignes)
+  renderWithProviders(routes, '/imports/1?tab=donnees')
+  await screen.findByText('Lignes 1 à 2 sur 2')
+  const avant = api.calls.filter((call) => call.url.endsWith('/api/imports')).length
+
+  await userEvent.click(screen.getByLabelText('Sélectionner toutes les lignes filtrées'))
+  await userEvent.click(screen.getByRole('button', { name: 'Supprimer la sélection' }))
+  const dialog = screen.getByRole('dialog', { name: 'Supprimer 2 lignes ?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }))
+
+  await screen.findByText('2 lignes supprimées')
+  // Sans cette relecture, l'onglet Colonnes continue d'annoncer l'ancien nombre de lignes.
+  await waitFor(() =>
+    expect(api.calls.filter((call) => call.url.endsWith('/api/imports')).length).toBeGreaterThan(
+      avant,
+    ),
+  )
+})
 
 test('refuse un changement de type qui perdrait des valeurs, en montrant lesquelles', async () => {
   const api = fakeApi([ventesPretes()], [], { invalid_count: 3, examples: ['1,5', 'N/A', '12.7'] })
