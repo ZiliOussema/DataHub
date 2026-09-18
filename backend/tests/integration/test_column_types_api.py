@@ -85,7 +85,7 @@ def test_the_job_refuses_a_change_that_would_lose_values(client: TestClient, tes
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "failed"
-    assert job["error"] == "1 valeur ne peut pas devenir des entiers, par exemple « 1.5 »"
+    assert job["error"] == "1 valeur ne peut pas devenir un entier, par exemple « 1.5 »"
     item = client.get("/api/imports").json()[0]
     assert (item["status"], column_types(client)["prix"]) == ("ready", "float")
     assert data_collections(test_db) == [f"import_data_{import_id}_v1"]

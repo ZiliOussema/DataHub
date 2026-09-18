@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { useColumnTypeChange, useDetectTypes, useJob, useUploadFile } from '../hooks/useImports'
 import { ApiError } from '../services/api'
-import { TYPE_LABELS, TYPE_PLURALS } from '../theme/types'
+import { TYPE_LABELS, TYPE_PLURALS, TYPE_SINGULARS } from '../theme/types'
 import type { Column, ColumnType, Import } from '../types/imports'
 import ColumnsPreview from './ColumnsPreview'
 import ConfirmDialog from './ConfirmDialog'
@@ -31,8 +31,10 @@ function columnChanges(before: Column[], after: Column[]): string {
 /** Explique pourquoi une colonne ne peut pas changer de type, avec des valeurs fautives. */
 function refusal(count: number, examples: string[], type: ColumnType): string {
   const values = examples.map((example) => `« ${example} »`).join(', ')
-  const subject = count === 1 ? 'valeur ne peut' : 'valeurs ne peuvent'
-  return `${NOMBRE.format(count)} ${subject} pas devenir ${TYPE_PLURALS[type]}, par exemple ${values}.`
+  const one = count === 1
+  const subject = one ? 'valeur ne peut' : 'valeurs ne peuvent'
+  const name = one ? TYPE_SINGULARS[type] : TYPE_PLURALS[type]
+  return `${NOMBRE.format(count)} ${subject} pas devenir ${name}, par exemple ${values}.`
 }
 
 /** Envoi d'un fichier dans un import : choix, aperçu des types, import et progression. */

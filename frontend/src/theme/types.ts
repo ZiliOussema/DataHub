@@ -17,3 +17,11 @@ export const TYPE_PLURALS: Record<ColumnType, string> = {
   float: 'des décimaux',
   string: 'du texte',
 }
+
+/** Forme employée au singulier : « ne peut pas devenir un entier ». */
+export const TYPE_SINGULARS: Record<ColumnType, string> = {
+  boolean: 'un booléen',
+  integer: 'un entier',
+  float: 'un décimal',
+  string: 'du texte',
+}
