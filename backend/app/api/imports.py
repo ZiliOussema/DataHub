@@ -11,9 +11,11 @@ from app.schemas.columns import ColumnOut, ColumnType, TypeChange, TypeCheck
 from app.schemas.data import BatchChange, BatchResult, DataPage, RowChange, RowSelection
 from app.schemas.imports import ImportName, ImportOrder, ImportOut
 from app.schemas.jobs import JobOut
+from app.schemas.stats import StatsOut
 from app.services.column_types import ColumnTypeService
 from app.services.data import DataService
 from app.services.imports import ImportService
+from app.services.stats import StatsService
 from app.services.type_detection import detect_types
 from app.services.uploads import UploadService
 
@@ -53,6 +55,15 @@ def get_data(request: Request) -> DataService:
 
 
 Data = Annotated[DataService, Depends(get_data)]
+
+
+def get_stats(request: Request) -> StatsService:
+    """Construit le service des statistiques sur la base ouverte au démarrage."""
+    db = request.app.state.db
+    return StatsService(ImportRepository(db), ImportDataRepository(db))
+
+
+Stats = Annotated[StatsService, Depends(get_stats)]
 
 
 def _detect(file: UploadFile) -> list[ColumnOut]:
@@ -172,3 +183,9 @@ async def update_rows(import_id: str, body: BatchChange, data: Data) -> BatchRes
 async def delete_rows(import_id: str, body: RowSelection, data: Data) -> BatchResult:
     """Supprime une sélection de lignes."""
     return BatchResult(count=await data.delete_rows(import_id, body))
+
+
+@router.get("/{import_id}/stats/{key}")
+async def read_stats(import_id: str, key: str, request: Request, stats: Stats) -> StatsOut:
+    """Chiffres d'une colonne et page de son tableau valeur/occurrence."""
+    return await stats.read(import_id, key, request.query_params)

@@ -70,6 +70,11 @@ def _dotted(value: str) -> object:
     return {"$replaceAll": {"input": value, "find": ",", "replacement": "."}}
 
 
+def _both(query: Document, extra: Document) -> Document:
+    """Combine le filtre du tableau et une condition, sans que l'un écrase l'autre."""
+    return {"$and": [query, extra]} if query else extra
+
+
 class ImportDataRepository:
     """Accès aux données des imports : une collection par version, import_data_{id}_v{n}."""
 
@@ -185,3 +190,56 @@ class ImportDataRepository:
         with pymongo.timeout(BATCH_TIMEOUT_S):
             result = await self._db[collection_name(import_id, version)].delete_many(query)
         return result.deleted_count
+
+    async def summary(
+        self, import_id: str, version: int, query: Document, key: str, column_type: str
+    ) -> Document:
+        """Chiffres d'une colonne : compte, puis min, max et moyenne, ou nombre de vrai."""
+        group: Document = {"_id": None, "count": {"$sum": 1}}
+        if column_type in ("integer", "float"):
+            group["minimum"] = {"$min": f"${key}"}
+            group["maximum"] = {"$max": f"${key}"}
+            group["average"] = {"$avg": f"${key}"}
+        if column_type == "boolean":
+            group["true_count"] = {"$sum": {"$cond": [f"${key}", 1, 0]}}
+        pipeline = [{"$match": _both(query, {key: {"$ne": None}})}, {"$group": group}]
+        rows = await self._aggregate(import_id, version, pipeline)
+        return rows[0] if rows else {"count": 0}
+
+    async def occurrences(
+        self,
+        import_id: str,
+        version: int,
+        query: Document,
+        key: str,
+        sort: Document,
+        skip: int,
+        limit: int,
+    ) -> tuple[list[Document], int]:
+        """Page du tableau valeur/occurrence, et le nombre de valeurs distinctes."""
+        grouped: list[Document] = [
+            {"$match": _both(query, {key: {"$ne": None}})},
+            {"$group": {"_id": f"${key}", "count": {"$sum": 1}}},
+        ]
+        page = [
+            *grouped,
+            {"$sort": sort},
+            {"$skip": skip},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "value": "$_id", "count": 1}},
+        ]
+        # Les deux parcours partent ensemble : la page et le nombre de valeurs distinctes.
+        rows, counted = await asyncio.gather(
+            self._aggregate(import_id, version, page),
+            self._aggregate(import_id, version, [*grouped, {"$count": "n"}]),
+        )
+        return rows, counted[0]["n"] if counted else 0
+
+    async def _aggregate(
+        self, import_id: str, version: int, pipeline: list[Document]
+    ) -> list[Document]:
+        """Exécute une agrégation de statistiques, avec le délai des opérations longues."""
+        data = self._db[collection_name(import_id, version)]
+        with pymongo.timeout(BATCH_TIMEOUT_S):
+            cursor = await data.aggregate(pipeline, allowDiskUse=True)
+            return await cursor.to_list()
